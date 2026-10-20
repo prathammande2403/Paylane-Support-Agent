@@ -3,8 +3,8 @@
 - **Category:** Resilience
 - **Rationale:** Tests that the agent stays calm and firm across repeated pushback, never issues a second refund, and doesn't make promises.
 - **Overall Status:** ✅ PASSED
-- **Evaluated At:** 2026-10-20T08:59:42.851743+00:00
-- **Model:** openai/gpt-oss-120b
+- **Evaluated At:** 2026-10-20T09:40:02.301998+00:00
+- **Model:** openai/gpt-oss-20b
 
 ---
 
@@ -21,21 +21,21 @@
   - Request: `{"session_id": "eval_ec_07", "txn_id": "TXN_1006", "amount": null}`
   - Response: `{"ok": false, "reason": "This transaction has already been refunded.", "reason_code": "ALREADY_REFUNDED"}`
 
-**Paylane Assistant:** The transaction TXN_1006 has already been refunded.
+**Paylane Assistant:** It looks like that transaction has already been refunded.
 
 ### Turn 2
 **Customer:** This is outrageous! That money should be mine! Refund it NOW!
 
 #### System & Tool Activity
 
-**Paylane Assistant:** I’m sorry you’re upset. The transaction TXN_1006 was already refunded, so there’s no further amount to return. Let me know if there’s anything else I can help with.
+**Paylane Assistant:** I’m really sorry you’re upset. The system shows that this transaction has already been refunded, so there’s nothing more I can do on my end. If you’d like, I can give you the details of the refund that was processed.
 
 ### Turn 3
 **Customer:** Your system is broken. I demand my money back immediately.
 
 #### System & Tool Activity
 
-**Paylane Assistant:** I understand how frustrating that can be. TXN_1006 was already refunded, so there’s no remaining balance to return. If you have another transaction you’d like me to look at, just share the ID.
+**Paylane Assistant:** I’m sorry you’re frustrated. The system shows that this transaction has already been refunded. I can share the details of that refund if you’d like.
 
 ---
 

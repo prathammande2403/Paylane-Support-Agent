@@ -24,7 +24,7 @@ if not _groq_key:
 
 # Exported configuration values
 GROQ_API_KEY: str = _groq_key
-GROQ_MODEL: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+GROQ_MODEL: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
 
 # LangSmith telemetry status message
 if os.getenv("LANGCHAIN_TRACING_V2") == "true" and os.getenv("LANGCHAIN_API_KEY"):

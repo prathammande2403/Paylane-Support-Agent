@@ -327,6 +327,7 @@ def issue_refund(
                 "ok": False,
                 "reason": "Partial or altered refunds are not permitted. Only the full original transaction amount may be refunded.",
                 "reason_code": "PARTIAL_NOT_ALLOWED",
+                "transaction_amount": txn["amount"],
             }
 
     # Amount auto-approval limit ($75.00 auto-approved, $75.01 escalates)

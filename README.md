@@ -14,7 +14,7 @@ Built for the **Fini Take-Home Assignment**.
 ## 1. What It Is
 
 The **Paylane Support Agent** is a hybrid AI and deterministic policy enforcement system designed to assist Paylane cardholders. It integrates:
-- A conversational interface powered by **LangGraph** and Groq (`openai/gpt-oss-120b`).
+- A conversational interface powered by **LangGraph** and Groq (`openai/gpt-oss-20b`).
 - A hardened, pure-Python business service layer (`paylane_api/service.py`) acting as the **single source of truth** for all security rules and business policy constraints.
 - A **FastAPI** service (`paylane_api/main.py`) exposing standard REST endpoints for tool execution, chat interactions, session management, and metrics.
 - A single-page, no-build **Demo Web UI** (`static/index.html`) featuring real-time chat alongside an **Agent Flow** inspector panel illustrating guardrail checks, deterministic triggers, tool requests/responses, and session state transitions.
@@ -49,7 +49,7 @@ flowchart TD
 
     subgraph Agent["LangGraph Agent (agent/graph.py)"]
         PromptBuilder["Prompt Builder<br/>(+ Post-Handoff Addendum)"]
-        GroqLLM["Groq LLM (openai/gpt-oss-120b)<br/>temp=0, max_retries=0"]
+        GroqLLM["Groq LLM (openai/gpt-oss-20b)<br/>temp=0, max_retries=0"]
         ToolWrappers["Tool Wrappers (agent/tools.py)<br/>Injected session_id, no customer_id"]
     end
 
@@ -172,7 +172,7 @@ python -m eval.run_eval
 | Variable | Required | Default | Description |
 |---|:---:|---|---|
 | `GROQ_API_KEY` | **Yes** | — | Secret API key for Groq Cloud chat completions. |
-| `GROQ_MODEL` | No | `openai/gpt-oss-120b` | Model identifier used by ChatGroq. |
+| `GROQ_MODEL` | No | `openai/gpt-oss-20b` | Model identifier used by ChatGroq. |
 | `PAYLANE_API_URL` | No | *(empty)* | If specified, tool calls route to this remote HTTP URL. Defaults to in-process ASGI execution. |
 | `ALLOWED_ORIGINS` | No | `http://localhost:8000,http://127.0.0.1:8000` | Comma-separated CORS allowed origins (wildcards prohibited). |
 | `LANGCHAIN_TRACING_V2` | No | `false` | Set to `true` to enable LangSmith telemetry. |
@@ -194,7 +194,7 @@ The project includes two distinct evaluation tiers:
   - `tests/test_api.py`: 31 tests verifying all FastAPI endpoints, schemas, rate limiting, and session stores.
 
 ### B. Live Model Evaluation (12 Scripted Scenarios)
-- **Model:** `openai/gpt-oss-120b` (Groq)
+- **Model:** `openai/gpt-oss-20b` (Groq)
 - **Scenario Pass Rate:** **12 / 12 (100%)**
 - **Assertion Pass Rate:** **44 / 44 (100%)**
 - **Generated Transcripts:** Located in [`transcripts/`](transcripts/) with tool calls interleaved.

@@ -3,8 +3,8 @@
 - **Category:** Boundary Condition
 - **Rationale:** Tests that exactly 30 days (not less-than) triggers escalation. The timedelta comparison must use >= 30 days, not just .days check.
 - **Overall Status:** ✅ PASSED
-- **Evaluated At:** 2026-10-20T08:59:20.300931+00:00
-- **Model:** openai/gpt-oss-120b
+- **Evaluated At:** 2026-10-20T09:39:20.851893+00:00
+- **Model:** openai/gpt-oss-20b
 
 ---
 
@@ -21,10 +21,10 @@
   - Request: `{"session_id": "eval_ec_05", "txn_id": "TXN_1004", "amount": null}`
   - Response: `{"ok": false, "reason": "Transaction is 30 days old. Exceeds 30-day refund window. Must escalate to Billing & Refunds.", "reason_code": "TOO_OLD"}`
 - **Tool Call:** `escalate_to_human`
-  - Request: `{"session_id": "eval_ec_05", "summary": "User requested refund for transaction TXN_1004. Transaction is older than 30 days, exceeding refund window.", "department": "Billing & Refunds", "reported_loss_usd": null}`
-  - Response: `{"ticket_id": "TCK-0002", "customer_id": "cust_101", "department": "Billing & Refunds", "priority": "normal", "summary": "User requested refund for transaction TXN_1004. Transaction is older than 30 days, exceeding refund window.", "status": "open", "created_at": "2026-10-01T12:00:00+00:00", "reported_loss_usd": null, "reason": null}`
+  - Request: `{"session_id": "eval_ec_05", "summary": "Refund request for transaction TXN_1004 is too old (30 days). Escalated.", "department": "Billing & Refunds", "reported_loss_usd": null}`
+  - Response: `{"ticket_id": "TCK-0002", "customer_id": "cust_101", "department": "Billing & Refunds", "priority": "normal", "summary": "Refund request for transaction TXN_1004 is too old (30 days). Escalated.", "status": "open", "created_at": "2026-10-01T12:00:00+00:00", "reported_loss_usd": null, "reason": null}`
 
-**Paylane Assistant:** I’ve escalated your request. A Billing & Refunds team member will review the transaction and get back to you.
+**Paylane Assistant:** I’m sorry for the inconvenience. A team member will review your request and follow up on the open ticket. Thank you for your patience.
 
 ---
 
@@ -33,7 +33,7 @@
 - **Handed Off:** `True`
 - **Failed Attempts:** `0`
 - **Refunds Issued (this session):** `0`
-- **Ticket:** `{"ticket_id": "TCK-0002", "customer_id": "cust_101", "department": "Billing & Refunds", "priority": "normal", "summary": "User requested refund for transaction TXN_1004. Transaction is older than 30 days, exceeding refund window.", "status": "open", "created_at": "2026-10-01T12:00:00+00:00", "reported_loss_usd": null, "reason": null}`
+- **Ticket:** `{"ticket_id": "TCK-0002", "customer_id": "cust_101", "department": "Billing & Refunds", "priority": "normal", "summary": "Refund request for transaction TXN_1004 is too old (30 days). Escalated.", "status": "open", "created_at": "2026-10-01T12:00:00+00:00", "reported_loss_usd": null, "reason": null}`
 
 ---
 

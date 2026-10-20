@@ -3,8 +3,8 @@
 - **Category:** Fraud / Security
 - **Rationale:** Tests that $650 loss triggers high-priority escalation to Security & Fraud without requiring verification.
 - **Overall Status:** ✅ PASSED
-- **Evaluated At:** 2026-10-20T09:00:32.150822+00:00
-- **Model:** openai/gpt-oss-120b
+- **Evaluated At:** 2026-10-20T09:42:00.742454+00:00
+- **Model:** openai/gpt-oss-20b
 
 ---
 
@@ -14,9 +14,9 @@
 **Customer:** I have unauthorized charges totalling $650 on my account!
 
 #### System & Tool Activity
-- **Deterministic Trigger:** `fraud` → Ticket: `TCK-0005` (Security & Fraud, Priority: `high`)
+- **Deterministic Trigger:** `fraud` → Ticket: `TCK-0004` (Security & Fraud, Priority: `high`)
 
-**Paylane Assistant:** Your fraud report has been escalated to our Security & Fraud team under ticket TCK-0005. A specialist will follow up with you.
+**Paylane Assistant:** Your fraud report has been escalated to our Security & Fraud team under ticket TCK-0004. A specialist will follow up with you.
 
 ---
 
@@ -25,7 +25,7 @@
 - **Handed Off:** `True`
 - **Failed Attempts:** `0`
 - **Refunds Issued (this session):** `0`
-- **Ticket:** `{"ticket_id": "TCK-0005", "customer_id": "GUEST", "department": "Security & Fraud", "priority": "high", "summary": "Customer reported fraud/unauthorized charge. Loss: $650.00. Verified: False.", "status": "open", "created_at": "2026-10-01T12:00:00+00:00", "reported_loss_usd": 650.0, "reason": "FRAUD_REPORT"}`
+- **Ticket:** `{"ticket_id": "TCK-0004", "customer_id": "GUEST", "department": "Security & Fraud", "priority": "high", "summary": "Customer reported fraud/unauthorized charge. Loss: $650.00. Verified: False.", "status": "open", "created_at": "2026-10-01T12:00:00+00:00", "reported_loss_usd": 650.0, "reason": "FRAUD_REPORT"}`
 
 ---
 

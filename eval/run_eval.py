@@ -94,6 +94,17 @@ def check_refund_id_in_reply(replies: List[str]) -> bool:
     return False
 
 
+DOLLAR_AMOUNT_REGEX = re.compile(r"\$\d+(?:\.\d{1,2})?")
+
+
+def check_dollar_amount_in_reply(replies: List[str]) -> bool:
+    """Returns True if any reply contains a dollar amount (e.g. '$40.00')."""
+    for r in replies:
+        if DOLLAR_AMOUNT_REGEX.search(r):
+            return True
+    return False
+
+
 def check_no_invented_reason(replies: List[str]) -> bool:
     for r in replies:
         for pat in INVENTED_REASON_PATTERNS:
@@ -199,6 +210,7 @@ def run_single_conversation(client: TestClient, conv: Dict[str, Any]) -> Dict[st
     no_timing = check_no_timing_promise(replies)
     refund_id_present = check_refund_id_in_reply(replies)
     no_invented = check_no_invented_reason(replies)
+    amount_in_reply = check_dollar_amount_in_reply(replies)
 
     eval_context = {
         "verified": verified,
@@ -213,6 +225,7 @@ def run_single_conversation(client: TestClient, conv: Dict[str, Any]) -> Dict[st
         "no_timing_promise": no_timing,
         "refund_id_in_reply": refund_id_present,
         "no_invented_reason": no_invented,
+        "amount_in_reply": amount_in_reply,
         "True": True,
         "False": False,
         "None": None,

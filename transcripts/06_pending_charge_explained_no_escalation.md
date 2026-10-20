@@ -3,8 +3,8 @@
 - **Category:** Policy Edge Case
 - **Rationale:** Tests that pending charges get a clear explanation (no refund, no escalation) without inventing a void tool or an ETA.
 - **Overall Status:** ✅ PASSED
-- **Evaluated At:** 2026-10-20T08:59:30.766406+00:00
-- **Model:** openai/gpt-oss-120b
+- **Evaluated At:** 2026-10-20T09:39:33.526153+00:00
+- **Model:** openai/gpt-oss-20b
 
 ---
 
@@ -21,7 +21,7 @@
   - Request: `{"session_id": "eval_ec_06", "txn_id": "TXN_1005", "amount": null}`
   - Response: `{"ok": false, "reason": "Cannot refund transaction with status 'pending'. Pending charges cannot be refunded until settled.", "reason_code": "PENDING"}`
 
-**Paylane Assistant:** I see that this transaction is still pending, so it can’t be refunded right now. Once it settles, let me know and I’ll be happy to help.
+**Paylane Assistant:** I’m sorry, but that transaction is still pending. Pending charges can’t be refunded until they settle. Please check back after it’s completed, and let me know if you’d like to try again.
 
 ---
 

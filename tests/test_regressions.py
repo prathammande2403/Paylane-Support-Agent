@@ -111,6 +111,20 @@ def test_bug4_zero_amount_rejected():
     assert res["reason_code"] == "PARTIAL_NOT_ALLOWED"
 
 
+def test_bug4_mismatched_amount_rejected_and_includes_transaction_amount():
+    """Amount 14000 on TXN_1001 ($40.00) must be rejected with PARTIAL_NOT_ALLOWED
+    and the response must include transaction_amount so the model can tell the customer."""
+    session = make_session(verified=True, customer_id="cust_101")
+    res = issue_refund(session, "TXN_1001", amount=14000.0)
+    assert res["ok"] is False
+    assert res["reason_code"] == "PARTIAL_NOT_ALLOWED"
+    # transaction_amount must be present so the prompt can surface the correct figure
+    assert "transaction_amount" in res
+    assert abs(res["transaction_amount"] - 40.00) < 1e-4, (
+        f"Expected transaction_amount ~40.00, got {res['transaction_amount']}"
+    )
+
+
 # --- Bug 5: Verification must not mutate shared mock DB ---
 def test_bug5_verification_does_not_mutate_db():
     """Successful verify_customer must NOT set verified=True in the DB."""

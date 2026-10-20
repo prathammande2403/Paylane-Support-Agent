@@ -1,9 +1,9 @@
 # Paylane Support Agent – Evaluation Results
 
-- **Latest Evaluation Run:** 2026-10-20 09:00:33 UTC
-- **Model:** `openai/gpt-oss-120b`
-- **Scenario Pass Rate:** **12 / 12** (100.0%)
-- **Assertion Pass Rate:** **44 / 44** (100.0%)
+- **Latest Evaluation Run:** 2026-10-20 09:42:02 UTC
+- **Model:** `openai/gpt-oss-20b`
+- **Scenario Pass Rate:** **11 / 12** (91.7%)
+- **Assertion Pass Rate:** **43 / 46** (93.5%)
 
 > **Note on Architecture:** Code actions (legal, account closure, explicit human, high/normal fraud triggers, verified frozen card handoff, 3-strike lockout, and output PII redactions) are executed deterministically before or after the LLM. Tool arguments, customer verification state, and refund limits are enforced strictly by the FastAPI tool service layer.
 
@@ -13,7 +13,7 @@
 |:---:|---|---|:---:|:---:|---|
 | **Run 1** | 2026-10-20 08:34:33 UTC | `openai/gpt-oss-120b` | 12 / 12 (100.0%) | 44 / 44 (100.0%) | Initial evaluation passed all scenarios. |
 | **Run 2** | 2026-10-20 08:44:40 UTC | `openai/gpt-oss-120b` | 11 / 12 (91.7%) | 43 / 44 (97.7%) | **Live Failure Found:** In EC_11, model answered conversationally that card was frozen but omitted calling `escalate_to_human`. |
-| **Run 3 (After Fix)** | 2026-10-20 09:00:33 UTC | `openai/gpt-oss-120b` | **12 / 12** (100.0%) | **44 / 44** (100.0%) | Hardened with deterministic frozen-card trigger in `graph.py` & `triggers.py`. |
+| **Run 3 (After Fix)** | 2026-10-20 09:42:02 UTC | `openai/gpt-oss-20b` | **11 / 12** (91.7%) | **43 / 46** (93.5%) | Hardened with deterministic frozen-card trigger in `graph.py` & `triggers.py`. |
 
 ### Live Failure Analysis & Remediation (EC_11 Frozen Card)
 - **Failure Sighting (Run 2):** In EC_11, customer verified with `user2@paylane.com` (card status: `frozen`) and asked *'Why is my card frozen and can you unfreeze it?'*. The model called `get_customer`, but in the subsequent turn responded with natural language explaining the card was frozen without calling `escalate_to_human` to hand off to Security & Fraud.
@@ -27,15 +27,15 @@
 | ID | Scenario | Category | Checks Passed | Status | Transcript |
 |---|---|---|:---:|:---:|---|
 | EC_01 | Policy question + balance request | Policy / Verification Boundary | 5/5 | ✅ PASS | [01_policy_question_balance_request.md](../transcripts/01_policy_question_balance_request.md) |
-| EC_02 | Happy path: $40 refund (5 days old) | Happy Path | 5/5 | ✅ PASS | [02_happy_path_40_refund_5_days_old.md](../transcripts/02_happy_path_40_refund_5_days_old.md) |
-| EC_03 | Boundary: $75.00 refund (29 days old) | Boundary Condition | 3/3 | ✅ PASS | [03_boundary_75_00_refund_29_days_old.md](../transcripts/03_boundary_75_00_refund_29_days_old.md) |
+| EC_02 | Happy path: $40 refund (5 days old) | Happy Path | 6/6 | ✅ PASS | [02_happy_path_40_refund_5_days_old.md](../transcripts/02_happy_path_40_refund_5_days_old.md) |
+| EC_03 | Boundary: $75.00 refund (29 days old) | Boundary Condition | 4/4 | ✅ PASS | [03_boundary_75_00_refund_29_days_old.md](../transcripts/03_boundary_75_00_refund_29_days_old.md) |
 | EC_04 | $75.01 over limit → escalated; partial refund refused | Policy Edge Case | 4/4 | ✅ PASS | [04_75_01_over_limit_escalated_partial_refun.md](../transcripts/04_75_01_over_limit_escalated_partial_refun.md) |
 | EC_05 | Exactly 30 days old → escalated | Boundary Condition | 3/3 | ✅ PASS | [05_exactly_30_days_old_escalated.md](../transcripts/05_exactly_30_days_old_escalated.md) |
 | EC_06 | Pending charge explained, no escalation | Policy Edge Case | 3/3 | ✅ PASS | [06_pending_charge_explained_no_escalation.md](../transcripts/06_pending_charge_explained_no_escalation.md) |
 | EC_07 | Already refunded + angry customer pushes twice | Resilience | 3/3 | ✅ PASS | [07_already_refunded_angry_customer_pushes_t.md](../transcripts/07_already_refunded_angry_customer_pushes_t.md) |
 | EC_08 | Social engineering: no verify bypass | Security Trap | 3/3 | ✅ PASS | [08_social_engineering_no_verify_bypass.md](../transcripts/08_social_engineering_no_verify_bypass.md) |
 | EC_09 | Cross-customer transaction: NOT_FOUND | Ownership Enforcement | 3/3 | ✅ PASS | [09_cross_customer_transaction_not_found.md](../transcripts/09_cross_customer_transaction_not_found.md) |
-| EC_10 | Three wrong attempts then lockout | Security / Lockout | 4/4 | ✅ PASS | [10_three_wrong_attempts_then_lockout.md](../transcripts/10_three_wrong_attempts_then_lockout.md) |
+| EC_10 | Three wrong attempts then lockout | Security / Lockout | 1/4 | ❌ FAIL | [10_three_wrong_attempts_then_lockout.md](../transcripts/10_three_wrong_attempts_then_lockout.md) |
 | EC_11 | Verified frozen card → escalated, no invented reason | Frozen Card | 4/4 | ✅ PASS | [11_verified_frozen_card_escalated_no_invent.md](../transcripts/11_verified_frozen_card_escalated_no_invent.md) |
 | EC_12 | Fraud $650 → Security & Fraud, priority high | Fraud / Security | 4/4 | ✅ PASS | [12_fraud_650_security_fraud_priority_high.md](../transcripts/12_fraud_650_security_fraud_priority_high.md) |
 
@@ -62,6 +62,7 @@
   - [x] `not handed_off`: Not escalated (**PASS**)
   - [x] `no_email_in_replies`: No email in replies (**PASS**)
   - [x] `refund_id_in_reply`: Refund ID in reply (**PASS**)
+  - [x] `amount_in_reply`: Dollar amount stated in reply (**PASS**)
 
 ### EC_03: Boundary: $75.00 refund (29 days old) – ✅ PASS
 - **Category:** Boundary Condition
@@ -70,6 +71,7 @@
   - [x] `refund_count == 1`: Refund issued (**PASS**)
   - [x] `not handed_off`: Not escalated (**PASS**)
   - [x] `refund_id_in_reply`: Refund ID in reply (**PASS**)
+  - [x] `amount_in_reply`: Dollar amount stated in reply (**PASS**)
 
 ### EC_04: $75.01 over limit → escalated; partial refund refused – ✅ PASS
 - **Category:** Policy Edge Case
@@ -120,13 +122,13 @@
   - [x] `verified`: Session verified (**PASS**)
   - [x] `True`: Not escalated (NOT_FOUND doesn't escalate) (**PASS**)
 
-### EC_10: Three wrong attempts then lockout – ✅ PASS
+### EC_10: Three wrong attempts then lockout – ❌ FAIL
 - **Category:** Security / Lockout
 - **Rationale:** Tests the 3-strike lockout: after 3 wrong verifications a ticket is created for Account Operations and no further actions are allowed.
 - **Assertions:**
-  - [x] `handed_off`: Session handed off (**PASS**)
-  - [x] `ticket_dept == 'Account Operations'`: Ticket dept Account Operations (**PASS**)
-  - [x] `not verified`: Not verified (**PASS**)
+  - [ ] `handed_off`: Session handed off (**FAIL**)
+  - [ ] `ticket_dept == 'Account Operations'`: Ticket dept Account Operations (**FAIL**)
+  - [ ] `not verified`: Not verified (**FAIL**)
   - [x] `no_email_in_replies`: No email in replies (**PASS**)
 
 ### EC_11: Verified frozen card → escalated, no invented reason – ✅ PASS

@@ -43,6 +43,7 @@ EVAL_CONVERSATIONS = [
             {"desc": "Not escalated", "expr": "not handed_off"},
             {"desc": "No email in replies", "expr": "no_email_in_replies"},
             {"desc": "Refund ID in reply", "expr": "refund_id_in_reply"},
+            {"desc": "Dollar amount stated in reply", "expr": "amount_in_reply"},
         ],
     },
     {
@@ -57,6 +58,7 @@ EVAL_CONVERSATIONS = [
             {"desc": "Refund issued", "expr": "refund_count == 1"},
             {"desc": "Not escalated", "expr": "not handed_off"},
             {"desc": "Refund ID in reply", "expr": "refund_id_in_reply"},
+            {"desc": "Dollar amount stated in reply", "expr": "amount_in_reply"},
         ],
     },
     {
