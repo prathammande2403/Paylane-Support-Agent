@@ -1,60 +1,56 @@
 """
 agent/guardrails.py
-Defines deterministic security layers for PII, Jailbreaks, Prompt Injections, and Topic Boundaries.
+Defines deterministic security layers for PII and Jailbreak detection.
 """
 
 import re
 
-# 1. Jailbreak & Prompt Injection Patterns
+# 1. Jailbreak & Prompt Injection Patterns (widened slightly, cheap backstop)
 JAILBREAK_PATTERNS = [
-    r"ignore\s+(all\s+)?previous\s+instructions",
-    r"you\s+are\s+now\s+in\s+DAN\s+mode",
+    r"ignore\s+(all\s+)?(previous\s+)?instructions",
+    r"you\s+are\s+now\s+in\s+dan\s+mode",
     r"system\s*:\s*override",
     r"disregard\s+(your\s+)?system\s+prompt",
     r"bypass\s+security\s+checks",
-    r"pretend\s+you\s+are\s+an\s+unfiltered"
+    r"pretend\s+you\s+are\s+an\s+unfiltered",
+    r"forget\s+(all\s+)?(previous\s+)?rules",
+    r"developer\s+mode\s+output",
+    r"admin\s+override",
 ]
 
-# 2. Sensitive / Banned Topics (Off-Topic or Dangerous Content)
-OFF_TOPIC_KEYWORDS = [
-    "crypto investment", "bitcoin prediction", "write python code for",
-    "tell me a joke", "recipe for", "political election"
-]
 
 def check_input_guardrails(user_text: str) -> dict:
     """
-    Evaluates raw user input for Prompt Injection, Jailbreaks, and Off-Topic chatter.
+    Evaluates raw user input for Prompt Injection / Jailbreaks.
+    Off-topic keyword list removed: prompt handles conversational scope.
     """
     text_lower = user_text.lower()
 
-    # Check Jailbreak / Prompt Injection
     for pattern in JAILBREAK_PATTERNS:
         if re.search(pattern, text_lower):
             return {
                 "safe": False,
                 "reason": "Prompt injection attempt detected.",
                 "action": "block",
-                "message": "I am a Paylane support assistant and cannot process system-override commands."
-            }
-
-    # Check Off-Topic Requests
-    for keyword in OFF_TOPIC_KEYWORDS:
-        if keyword in text_lower:
-            return {
-                "safe": False,
-                "reason": "Off-topic query detected.",
-                "action": "refuse",
-                "message": "I can only assist with Paylane account services, card management, and transaction refunds."
+                "message": "I am a Paylane support assistant and cannot process system-override commands.",
             }
 
     return {"safe": True}
 
+
 def sanitize_output_pii(text: str) -> str:
     """
-    Output Guardrail: Redacts any accidentally generated full Credit Card Numbers or Social Security Numbers.
+    Output Guardrail: Masks any email address and any card-like number (13-16 digits,
+    with optional spaces/dashes) to [redacted], while preserving bare 4-digit references.
     """
-    # Regex for standard 16-digit credit card patterns
-    card_pattern = r"\b(?:\d[ -]*?){13,16}\b"
-    # Redact full card numbers except the last 4
-    sanitized = re.sub(card_pattern, "****-****-****-XXXX", text)
+    if not text:
+        return ""
+    # Mask email addresses
+    sanitized = re.sub(
+        r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
+        "[redacted]",
+        text,
+    )
+    # Mask 13-16 digit card numbers (allowing spaces or dashes)
+    sanitized = re.sub(r"\b(?:\d[ -]*?){13,16}\b", "[redacted]", sanitized)
     return sanitized
