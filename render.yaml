@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: paylane-support-agent
+    env: python
+    region: oregon
+    plan: free
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn paylane_api.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.4
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-120b
+      - key: ALLOWED_ORIGINS
+        value: "http://localhost:8000,http://127.0.0.1:8000,https://paylane-support-agent.onrender.com"
