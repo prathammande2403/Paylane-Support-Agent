@@ -1,0 +1,229 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.4, pytest-9.1.1, pluggy-1.7.0
+rootdir: C:\Users\ASUS\Desktop\Paylane Support Agent
+plugins: anyio-4.15.1, langsmith-0.14.11
+collected 10 items
+
+tests\test_regressions.py FFFFFFFF.F                                     [100%]
+
+================================== FAILURES ===================================
+_________ test_bug1_unverified_user_cannot_read_or_refund_transaction _________
+
+    def test_bug1_unverified_user_cannot_read_or_refund_transaction():
+        """
+        Bug 1: get_transaction and issue_refund skip ownership check when cust_id is None,
+        and never check is_verified. Unverified users can read or refund any transaction.
+        Expected: Unverified calls must fail with ok=False.
+        """
+        # Unverified read attempt
+        res_read = get_transaction.invoke({"txn_id": "TXN_1001"})
+>       assert res_read.get("ok") is False, f"Expected unverified read to fail, got {res_read}"
+E       AssertionError: Expected unverified read to fail, got {'ok': True, 'txn_id': 'TXN_1001', 'customer_id': 'cust_101', 'amount': 45.5, 'date': '2026-10-08T12:00:00+00:00', 'merchant': 'Coffee Shop', 'status': 'settled'}
+E       assert True is False
+E        +  where True = <built-in method get of dict object at 0x0000018D5706EB40>('ok')
+E        +    where <built-in method get of dict object at 0x0000018D5706EB40> = {'ok': True, 'txn_id': 'TXN_1001', 'customer_id': 'cust_101', 'amount': 45.5, ...}.get
+
+tests\test_regressions.py:41: AssertionError
+________________ test_bug2_customer_id_not_in_tool_signatures _________________
+
+    def test_bug2_customer_id_not_in_tool_signatures():
+        """
+        Bug 2: The LLM can pass customer_id to tools and override session value.
+        Expected: customer_id must be removed from model-visible tool signatures.
+        """
+>       assert "customer_id" not in get_transaction.args, "customer_id should not be in get_transaction model args"
+E       AssertionError: customer_id should not be in get_transaction model args
+E       assert 'customer_id' not in {'txn_id': {'title': 'Txn Id', 'type': 'string'}, 'customer_id': {'anyOf': [{'type': 'string'}, {'type': 'null'}], 'default': None, 'title': 'Customer Id'}}
+E        +  where {'txn_id': {'title': 'Txn Id', 'type': 'string'}, 'customer_id': {'anyOf': [{'type': 'string'}, {'type': 'null'}], 'default': None, 'title': 'Customer Id'}} = StructuredTool(name='get_transaction', description='Retrieves transaction details for a verified customer.', args_schema=<class 'langchain_core.utils.pydantic.get_transaction'>, func=<function get_transaction at 0x0000018D56955080>).args
+
+tests\test_regressions.py:53: AssertionError
+_____________ test_bug3_three_strike_lockout_and_escalated_state ______________
+
+    def test_bug3_three_strike_lockout_and_escalated_state():
+        """
+        Bug 3: 3-strike lock does not lock: get_customer still works after 3 failures,
+        and refund tools do not check escalated.
+        Expected: Once locked/escalated, further get_customer or refund attempts must be blocked.
+        """
+        # Try with state already having escalated/3 failures, attempting to verify with correct credentials
+        call_payload = {
+            "name": "get_customer",
+            "args": {"email": "user1@paylane.com", "card_last4": "4321"},
+            "id": "call_locked",
+            "type": "tool_call",
+        }
+        cmd = get_customer.invoke(
+            call_payload,
+            state={"failed_attempts": 3, "escalated": True, "customer_id": "cust_101"}
+        )
+        # On original code, cmd verifies user1@paylane.com and returns is_verified: True!
+        verified = False
+        if hasattr(cmd, "update"):
+            verified = cmd.update.get("is_verified", False)
+        elif isinstance(cmd, dict):
+            verified = cmd.get("ok", False)
+>       assert not verified, "Locked session must NOT allow verification"
+E       AssertionError: Locked session must NOT allow verification
+E       assert not True
+
+tests\test_regressions.py:81: AssertionError
+____________________ test_bug4_partial_refunds_prohibited _____________________
+
+    def test_bug4_partial_refunds_prohibited():
+        """
+        Bug 4: Partial refunds are possible through the amount parameter.
+        Expected: Only full transaction amount may be refunded.
+        """
+        res = issue_refund.invoke(
+            {"txn_id": "TXN_1001", "amount": 10.00},
+            state={"is_verified": True, "customer_id": "cust_101"}
+        )
+>       assert res.get("ok") is False, f"Expected partial refund to be rejected, got: {res}"
+E       AssertionError: Expected partial refund to be rejected, got: {'ok': True, 'refund_id': 'REF-934081', 'amount': 10.0, 'message': 'Refund successfully issued. Refund ID: REF-934081'}
+E       assert True is False
+E        +  where True = <built-in method get of dict object at 0x0000018D57109D40>('ok')
+E        +    where <built-in method get of dict object at 0x0000018D57109D40> = {'ok': True, 'refund_id': 'REF-934081', 'amount': 10.0, 'message': 'Refund successfully issued. Refund ID: REF-934081'}.get
+
+tests\test_regressions.py:100: AssertionError
+____________ test_bug5_verification_does_not_mutate_shared_mock_db ____________
+
+    def test_bug5_verification_does_not_mutate_shared_mock_db():
+        """
+        Bug 5: customer['verified'] = True mutates the shared mock DB, leaking across sessions.
+        Expected: Verification state must not mutate the shared mock DB.
+        """
+        call_payload = {
+            "name": "get_customer",
+            "args": {"email": "user1@paylane.com", "card_last4": "4321"},
+            "id": "call_verify",
+            "type": "tool_call",
+        }
+        get_customer.invoke(call_payload)
+        # Check shared mock dict
+>       assert MOCK_CUSTOMERS["user1@paylane.com"].get("verified") is False, (
+            "MOCK_CUSTOMERS should not have verified=True mutated in place"
+        )
+E       AssertionError: MOCK_CUSTOMERS should not have verified=True mutated in place
+E       assert True is False
+E        +  where True = <built-in method get of dict object at 0x0000018D55632F00>('verified')
+E        +    where <built-in method get of dict object at 0x0000018D55632F00> = {'id': 'cust_101', 'name': 'Alex Morgan', 'email': 'user1@paylane.com', 'card_last4': '4321', ...}.get
+
+tests\test_regressions.py:116: AssertionError
+____________ test_bug8_fraud_unauthorized_below_500_must_escalate _____________
+
+    def test_bug8_fraud_unauthorized_below_500_must_escalate():
+        """
+        Bug 8: Fraud amount regex treats any number as dollar amount,
+        and suspected unauthorized charges below $500 are not forced to human.
+        Expected: Suspected unauthorized charge below $500 must escalate to Security & Fraud (normal priority).
+        """
+        from agent.graph import paylane_graph
+    
+        state = {
+            "messages": [HumanMessage(content="There is an unauthorized charge of $50 on my card.")],
+            "customer_id": None,
+            "email_provided": None,
+            "card_last4_provided": None,
+            "is_verified": False,
+            "failed_attempts": 0,
+            "unresolved_turns": 0,
+            "escalated": False,
+            "ticket_details": None,
+        }
+        result = paylane_graph.invoke(state)
+>       assert result.get("escalated") is True, "Suspected unauthorized charge below $500 must escalate"
+E       AssertionError: Suspected unauthorized charge below $500 must escalate
+E       assert False is True
+E        +  where False = <built-in method get of dict object at 0x0000018D573D2240>('escalated')
+E        +    where <built-in method get of dict object at 0x0000018D573D2240> = {'messages': [HumanMessage(content='There is an unauthorized charge of $50 on my card.', additional_kwargs={}, respons...t_token_details': {'reasoning': 141}})], 'customer_id': None, 'email_provided': None, 'card_last4_provided': None, ...}.get
+
+tests\test_regressions.py:141: AssertionError
+---------------------------- Captured stdout call -----------------------------
+[LangSmith] Tracing enabled successfully for project: paylane-support-agent
+______________ test_bug9_escalate_to_human_validates_department _______________
+
+    def test_bug9_escalate_to_human_validates_department():
+        """
+        Bug 9: escalate_to_human lets model choose priority and department freely.
+        Expected: Department must be validated against allowed set and priority computed in code.
+        """
+        ALLOWED_DEPTS = {
+            "Billing & Refunds",
+            "Security & Fraud",
+            "Legal & Compliance",
+            "Account Operations",
+            "General Support",
+        }
+        call_payload = {
+            "name": "escalate_to_human",
+            "args": {"department": "FakeDepartment", "summary": "test", "priority": "urgent"},
+            "id": "call_esc",
+            "type": "tool_call",
+        }
+        res = escalate_to_human.invoke(call_payload)
+        dept = ""
+        if hasattr(res, "update"):
+            dept = res.update.get("ticket_details", {}).get("department", "")
+        elif isinstance(res, dict):
+            dept = res.get("department", "")
+>       assert dept in ALLOWED_DEPTS, f"Department '{dept}' must be one of allowed set"
+E       AssertionError: Department 'FakeDepartment' must be one of allowed set
+E       assert 'FakeDepartment' in {'Account Operations', 'Billing & Refunds', 'General Support', 'Legal & Compliance', 'Security & Fraud'}
+
+tests\test_regressions.py:170: AssertionError
+________________ test_bug10_future_dated_transaction_rejected _________________
+
+    def test_bug10_future_dated_transaction_rejected():
+        """
+        Bug 10: Future-dated transactions pass with negative age.
+        Expected: Future-dated transactions must be rejected with ok=False.
+        """
+        future_date = (FIXED_TEST_CLOCK + timedelta(days=5)).isoformat()
+        MOCK_TRANSACTIONS["TXN_FUTURE"] = {
+            "txn_id": "TXN_FUTURE",
+            "customer_id": "cust_101",
+            "amount": 40.00,
+            "date": future_date,
+            "merchant": "Future Store",
+            "status": "settled",
+        }
+        res = issue_refund.invoke(
+            {"txn_id": "TXN_FUTURE"},
+            state={"is_verified": True, "customer_id": "cust_101"}
+        )
+>       assert res.get("ok") is False, f"Expected future-dated refund to be rejected, got: {res}"
+E       AssertionError: Expected future-dated refund to be rejected, got: {'ok': True, 'refund_id': 'REF-106205', 'amount': 40.0, 'message': 'Refund successfully issued. Refund ID: REF-106205'}
+E       assert True is False
+E        +  where True = <built-in method get of dict object at 0x0000018D57420B00>('ok')
+E        +    where <built-in method get of dict object at 0x0000018D57420B00> = {'ok': True, 'refund_id': 'REF-106205', 'amount': 40.0, 'message': 'Refund successfully issued. Refund ID: REF-106205'}.get
+
+tests\test_regressions.py:191: AssertionError
+_________________ test_bug15_output_sanitization_masks_email __________________
+
+    def test_bug15_output_sanitization_masks_email():
+        """
+        Bug 15: Output filter does not mask email addresses.
+        Expected: Emails in agent output must be masked.
+        """
+        text = "The user email is user1@paylane.com and card is 1234567812345678."
+        sanitized = sanitize_output_pii(text)
+>       assert "user1@paylane.com" not in sanitized, "Email should be masked in output"
+E       AssertionError: Email should be masked in output
+E       assert 'user1@paylane.com' not in 'The user em...*-****-XXXX.'
+E         
+E         'user1@paylane.com' is contained here:
+E           The user email is user1@paylane.com and card is ****-****-****-XXXX.
+E         ?                   +++++++++++++++++
+
+tests\test_regressions.py:225: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_regressions.py::test_bug1_unverified_user_cannot_read_or_refund_transaction
+FAILED tests/test_regressions.py::test_bug2_customer_id_not_in_tool_signatures
+FAILED tests/test_regressions.py::test_bug3_three_strike_lockout_and_escalated_state
+FAILED tests/test_regressions.py::test_bug4_partial_refunds_prohibited - Asse...
+FAILED tests/test_regressions.py::test_bug5_verification_does_not_mutate_shared_mock_db
+FAILED tests/test_regressions.py::test_bug8_fraud_unauthorized_below_500_must_escalate
+FAILED tests/test_regressions.py::test_bug9_escalate_to_human_validates_department
+FAILED tests/test_regressions.py::test_bug10_future_dated_transaction_rejected
+FAILED tests/test_regressions.py::test_bug15_output_sanitization_masks_email
+========================= 9 failed, 1 passed in 6.76s =========================
