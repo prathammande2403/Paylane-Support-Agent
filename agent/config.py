@@ -17,12 +17,14 @@ if hasattr(sys.stdout, "reconfigure"):
 # Load environment variables from .env file
 load_dotenv()
 
-# Verify required keys
-if not os.getenv("GROQ_API_KEY"):
+# Verify required keys - read GROQ_API_KEY from env only, never hardcode
+_groq_key = os.getenv("GROQ_API_KEY")
+if not _groq_key:
     raise ValueError("CRITICAL: GROQ_API_KEY is missing from environment variables or .env file.")
 
-# Model selection - defaults to openai/gpt-oss-120b which is accessible and supports tool calling
-GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+# Exported configuration values
+GROQ_API_KEY: str = _groq_key
+GROQ_MODEL: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 
 # LangSmith telemetry status message
 if os.getenv("LANGCHAIN_TRACING_V2") == "true" and os.getenv("LANGCHAIN_API_KEY"):
