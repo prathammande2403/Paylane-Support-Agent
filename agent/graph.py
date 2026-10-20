@@ -124,7 +124,7 @@ def agent_node(state: PaylaneState, config: Optional[RunnableConfig] = None) -> 
 
     full_prompt = [SystemMessage(content=system_prompt)] + list(state["messages"])
 
-    # 3. LLM invoke with single exponential backoff retry mechanism (max 4 tries for 429s)
+    # 3. LLM invoke with single exponential backoff retry mechanism (max 4 tries for 429s and connection errors)
     response = None
     for attempt in range(4):
         try:
@@ -132,7 +132,8 @@ def agent_node(state: PaylaneState, config: Optional[RunnableConfig] = None) -> 
             break
         except Exception as e:
             err_str = str(e).lower()
-            if ("429" in err_str or "rate limit" in err_str) and attempt < 3:
+            is_retryable = any(k in err_str for k in ("429", "rate limit", "connection", "timeout", "econnreset"))
+            if is_retryable and attempt < 3:
                 time.sleep(2.0 * (2 ** attempt))
             else:
                 raise e

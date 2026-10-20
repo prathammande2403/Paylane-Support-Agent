@@ -24,8 +24,8 @@ def _get_session_id(config: Optional[RunnableConfig]) -> str:
 
 def _call_tool_api(endpoint: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Calls FastAPI tool endpoint using httpx.
-    Uses real HTTP if PAYLANE_API_URL is set, otherwise in-process ASGITransport.
+    Calls FastAPI tool endpoint using httpx or in-process TestClient.
+    Uses real HTTP if PAYLANE_API_URL is set, otherwise in-process TestClient.
     """
     api_url = os.getenv("PAYLANE_API_URL")
     if api_url:
@@ -33,8 +33,9 @@ def _call_tool_api(endpoint: str, payload: Dict[str, Any]) -> Dict[str, Any]:
             resp = client.post(endpoint, json=payload)
             return resp.json()
     else:
+        from fastapi.testclient import TestClient
         from paylane_api.main import app
-        with httpx.Client(transport=httpx.ASGITransport(app=app), base_url="http://testserver", timeout=15.0) as client:
+        with TestClient(app, base_url="http://testserver") as client:
             resp = client.post(endpoint, json=payload)
             return resp.json()
 
