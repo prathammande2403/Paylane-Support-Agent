@@ -26,7 +26,7 @@ from agent.tools import (
     issue_refund,
     _get_session_id,
 )
-from agent.triggers import check_deterministic_triggers
+from agent.triggers import check_deterministic_triggers, check_frozen_card_trigger
 from paylane_api.sessions import session_store
 
 
@@ -116,6 +116,51 @@ def agent_node(state: PaylaneState, config: Optional[RunnableConfig] = None) -> 
                 "customer_id": session.customer_id,
                 "failed_attempts": session.failed_attempts,
             }
+
+        # Deterministic Frozen Card Check (if already verified)
+        frozen_res = check_frozen_card_trigger(user_text, session)
+        if frozen_res:
+            session.trace.append({
+                "step": "deterministic_trigger",
+                "trigger": frozen_res["trigger"],
+                "ticket": frozen_res["ticket"],
+            })
+            sanitized_reply = sanitize_output_pii(frozen_res["reply"])
+            session.trace.append({"step": "final_reply", "reply": sanitized_reply})
+            return {
+                "messages": [AIMessage(content=sanitized_reply)],
+                "escalated": True,
+                "ticket_details": frozen_res["ticket"],
+                "is_verified": session.verified,
+                "customer_id": session.customer_id,
+                "failed_attempts": session.failed_attempts,
+            }
+
+    # Deterministic check immediately after successful get_customer tool response
+    if is_tool_response:
+        tool_name = getattr(last_msg, "name", None)
+        if tool_name == "get_customer" or any(
+            isinstance(m, ToolMessage) and getattr(m, "name", "") == "get_customer"
+            for m in state["messages"][-3:]
+        ):
+            user_text = get_last_user_message(state["messages"])
+            frozen_res = check_frozen_card_trigger(user_text, session)
+            if frozen_res:
+                session.trace.append({
+                    "step": "deterministic_trigger",
+                    "trigger": frozen_res["trigger"],
+                    "ticket": frozen_res["ticket"],
+                })
+                sanitized_reply = sanitize_output_pii(frozen_res["reply"])
+                session.trace.append({"step": "final_reply", "reply": sanitized_reply})
+                return {
+                    "messages": [AIMessage(content=sanitized_reply)],
+                    "escalated": True,
+                    "ticket_details": frozen_res["ticket"],
+                    "is_verified": session.verified,
+                    "customer_id": session.customer_id,
+                    "failed_attempts": session.failed_attempts,
+                }
 
     # 2. Build system prompt reading session state directly
     system_prompt = PAYLANE_SYSTEM_PROMPT

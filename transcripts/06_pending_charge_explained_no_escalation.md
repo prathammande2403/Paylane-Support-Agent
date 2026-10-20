@@ -3,7 +3,7 @@
 - **Category:** Policy Edge Case
 - **Rationale:** Tests that pending charges get a clear explanation (no refund, no escalation) without inventing a void tool or an ETA.
 - **Overall Status:** ✅ PASSED
-- **Evaluated At:** 2026-10-20T08:39:28.112363+00:00
+- **Evaluated At:** 2026-10-20T08:59:30.766406+00:00
 - **Model:** openai/gpt-oss-120b
 
 ---

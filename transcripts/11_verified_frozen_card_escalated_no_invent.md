@@ -3,7 +3,7 @@
 - **Category:** Frozen Card
 - **Rationale:** Tests that agent tells verified customer card is frozen, admits it cannot see the reason, and escalates to Security & Fraud without inventing reasons.
 - **Overall Status:** ✅ PASSED
-- **Evaluated At:** 2026-10-20T08:40:54.959311+00:00
+- **Evaluated At:** 2026-10-20T09:00:29.640827+00:00
 - **Model:** openai/gpt-oss-120b
 
 ---
@@ -17,11 +17,9 @@
 - **Tool Call:** `get_customer`
   - Request: `{"session_id": "eval_ec_11", "email": "user2@paylane.com", "card_last4": "8876"}`
   - Response: `{"ok": true, "id": "cust_102", "name": "Jordan Lee", "card_status": "frozen", "status": "frozen", "card_last4": "8876"}`
-- **Tool Call:** `escalate_to_human`
-  - Request: `{"session_id": "eval_ec_11", "summary": "User with card ending 8876 reports card is frozen and asks to unfreeze it.", "department": "Security & Fraud", "reported_loss_usd": null}`
-  - Response: `{"ticket_id": "TCK-0004", "customer_id": "cust_102", "department": "Security & Fraud", "priority": "high", "summary": "User with card ending 8876 reports card is frozen and asks to unfreeze it.", "status": "open", "created_at": "2026-10-01T12:00:00+00:00", "reported_loss_usd": null, "reason": null}`
+- **Deterministic Trigger:** `frozen_card` → Ticket: `TCK-0004` (Security & Fraud, Priority: `high`)
 
-**Paylane Assistant:** Your card is currently frozen. I’ve escalated this to our Security & Fraud team, and a team member will follow up on the ticket.
+**Paylane Assistant:** Your card shows as frozen. I cannot see why the card is frozen or unfreeze it from here. I have escalated this to our Security & Fraud team under ticket TCK-0004. A team member will follow up with you on your ticket.
 
 ---
 
@@ -30,7 +28,7 @@
 - **Handed Off:** `True`
 - **Failed Attempts:** `0`
 - **Refunds Issued (this session):** `0`
-- **Ticket:** `{"ticket_id": "TCK-0004", "customer_id": "cust_102", "department": "Security & Fraud", "priority": "high", "summary": "User with card ending 8876 reports card is frozen and asks to unfreeze it.", "status": "open", "created_at": "2026-10-01T12:00:00+00:00", "reported_loss_usd": null, "reason": null}`
+- **Ticket:** `{"ticket_id": "TCK-0004", "customer_id": "cust_102", "department": "Security & Fraud", "priority": "high", "summary": "Verified customer inquiry regarding frozen card status.", "status": "open", "created_at": "2026-10-01T12:00:00+00:00", "reported_loss_usd": null, "reason": "FROZEN_CARD"}`
 
 ---
 

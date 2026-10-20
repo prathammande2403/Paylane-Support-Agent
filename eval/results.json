@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-10-20T08:40:58.971795+00:00",
+  "timestamp": "2026-10-20T09:00:33.652555+00:00",
   "model": "openai/gpt-oss-120b",
   "total_conversations": 12,
   "passed_conversations": 12,
@@ -135,7 +135,7 @@
           "customer_id": "cust_101",
           "department": "Billing & Refunds",
           "priority": "normal",
-          "summary": "Customer request refund for transaction TXN_1003, amount $75.01, exceeds auto\u2011approval limit.",
+          "summary": "Customer Alex Morgan (email [redacted], card ending 4321) requested refund for transaction TXN_1003 which exceeds the $75 auto-approval limit.",
           "status": "open",
           "created_at": "2026-10-01T12:00:00+00:00",
           "reported_loss_usd": null,
@@ -181,7 +181,7 @@
           "customer_id": "cust_101",
           "department": "Billing & Refunds",
           "priority": "normal",
-          "summary": "Customer requested refund for transaction TXN_1004. Refund request exceeds 30-day window.",
+          "summary": "User requested refund for transaction TXN_1004. Transaction is older than 30 days, exceeding refund window.",
           "status": "open",
           "created_at": "2026-10-01T12:00:00+00:00",
           "reported_loss_usd": null,
@@ -392,11 +392,11 @@
           "customer_id": "cust_102",
           "department": "Security & Fraud",
           "priority": "high",
-          "summary": "User with card ending 8876 reports card is frozen and asks to unfreeze it.",
+          "summary": "Verified customer inquiry regarding frozen card status.",
           "status": "open",
           "created_at": "2026-10-01T12:00:00+00:00",
           "reported_loss_usd": null,
-          "reason": null
+          "reason": "FROZEN_CARD"
         },
         "refund_count": 0
       },

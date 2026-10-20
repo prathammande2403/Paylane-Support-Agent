@@ -7,7 +7,11 @@ No LLM required.
 import pytest
 from paylane_api.service import SessionState, reset_counters
 from data.mock_db import get_fresh_db
-from agent.triggers import check_deterministic_triggers, parse_reported_dollar_amounts
+from agent.triggers import (
+    check_deterministic_triggers,
+    parse_reported_dollar_amounts,
+    check_frozen_card_trigger,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -226,3 +230,32 @@ def test_multiple_amounts_summed():
     """Multiple $ amounts in same message should be summed."""
     result = parse_reported_dollar_amounts("I see $100 and $200 in charges")
     assert result == 300.0
+
+
+# --- Frozen Card Trigger Tests ---
+def test_frozen_card_trigger_escalates():
+    """Verified customer inquiring about frozen card triggers Security & Fraud high priority."""
+    s = make_session()
+    s.verified = True
+    s.customer_id = "cust_102"
+    s.card_status = "frozen"
+
+    res = check_frozen_card_trigger("Why is my card frozen and can you unfreeze it?", s)
+    assert res is not None
+    assert res["trigger"] == "frozen_card"
+    assert res["ticket"]["department"] == "Security & Fraud"
+    assert res["ticket"]["priority"] == "high"
+    assert "frozen" in res["reply"].lower()
+    assert s.handed_off is True
+
+
+def test_frozen_card_unrelated_refund_does_not_trigger():
+    """A verified customer with a frozen card requesting an unrelated refund must not trigger frozen card escalation."""
+    s = make_session()
+    s.verified = True
+    s.customer_id = "cust_102"
+    s.card_status = "frozen"
+
+    res = check_frozen_card_trigger("Please refund TXN_1001.", s)
+    assert res is None
+    assert s.handed_off is False

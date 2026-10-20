@@ -3,7 +3,7 @@
 - **Category:** Fraud / Security
 - **Rationale:** Tests that $650 loss triggers high-priority escalation to Security & Fraud without requiring verification.
 - **Overall Status:** ✅ PASSED
-- **Evaluated At:** 2026-10-20T08:40:57.470259+00:00
+- **Evaluated At:** 2026-10-20T09:00:32.150822+00:00
 - **Model:** openai/gpt-oss-120b
 
 ---

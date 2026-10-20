@@ -186,11 +186,11 @@ python -m eval.run_eval
 The project includes two distinct evaluation tiers:
 
 ### A. Deterministic Unit & Regression Test Suite
-- **Result:** **102 / 102 Tests Passing (100%)**
+- **Result:** **104 / 104 Tests Passing (100%)**
 - **Test Categories:**
   - `tests/test_regressions.py`: 26 tests verifying fixes for all 16 bugs from the original codebase.
   - `tests/test_service.py`: 15 tests verifying every guard, edge case, and error code in `paylane_api/service.py`.
-  - `tests/test_triggers.py`: 30 tests verifying deterministic pre-checks (legal, closure, human, fraud parsing).
+  - `tests/test_triggers.py`: 32 tests verifying deterministic pre-checks (legal, closure, human, fraud parsing, frozen card trigger).
   - `tests/test_api.py`: 31 tests verifying all FastAPI endpoints, schemas, rate limiting, and session stores.
 
 ### B. Live Model Evaluation (12 Scripted Scenarios)
@@ -200,12 +200,19 @@ The project includes two distinct evaluation tiers:
 - **Generated Transcripts:** Located in [`transcripts/`](transcripts/) with tool calls interleaved.
 - **Detailed Report:** View [`eval/RESULTS.md`](eval/RESULTS.md) and [`eval/results.json`](eval/results.json).
 
-*Architecture Transparency Note:* In the evaluation transcripts, emergency triggers (legal action, account closure, explicit human requests, and unauthorized fraud reports) and safety filters (output email/card redaction) execute **deterministically in code** before or after the LLM call, guaranteeing policy compliance.
+*Architecture Transparency Note:* In the evaluation transcripts, emergency triggers (legal action, account closure, explicit human requests, verified frozen card handoff, and unauthorized fraud reports) and safety filters (output email/card redaction) execute **deterministically in code** before or after the LLM call, guaranteeing policy compliance.
 
 ---
 
-## 6. Bugs Found & Fixed (Baseline Comparison)
+## 6. Bugs & Live Failures Found and Fixed
 
+### A. Live-Model Failure Found & Fixed (EC_11 Frozen Card Escalation)
+During iterative live evaluation (Run 2 in [`eval/RESULTS.md`](eval/RESULTS.md)), a critical LLM failure was captured:
+- **Failure Sighting:** In EC_11, customer verified with `user2@paylane.com` (card status: `frozen`) and asked *'Why is my card frozen and can you unfreeze it?'*. The model called `get_customer`, but in the subsequent turn responded conversationally that the card was frozen without invoking `escalate_to_human`.
+- **Root Cause:** LLM non-determinism. Relying on the model to call an escalation tool after recognizing card status in tool output is vulnerable to omission across multi-turn chats.
+- **Hardened Fix:** Made frozen-card handoff deterministic in `agent/graph.py` and `agent/triggers.py`. Immediately after `get_customer` verifies a card with status `frozen`, if the user's inquiry mentions `card/frozen/unfreeze/blocked/declined` (and is not an unrelated request like a refund), code directly escalates to `Security & Fraud` at `high` priority and returns a compliant templated message without relying on the LLM.
+
+### B. Baseline Vulnerabilities Fixed (Pre-Refactoring Comparison)
 Before refactoring, comprehensive regression tests were executed against the original baseline codebase. Output was saved to [`docs/baseline_failures.txt`](docs/baseline_failures.txt), demonstrating baseline vulnerabilities:
 
 ```
@@ -216,7 +223,7 @@ tests\test_regressions.py FFFFFFFF.F                                     [100%]
 ================================== FAILURES ===================================
 ```
 
-### Key Vulnerabilities Fixed:
+#### Key Vulnerabilities Fixed:
 
 1. **Unverified Data & Refund Access (Bug 1):**
    - *Baseline:* `get_transaction` and `issue_refund` did not check `is_verified` and skipped ownership checks if `customer_id` was `None`. Any unverified user could query or refund any transaction.

@@ -78,6 +78,7 @@ class SessionState:
         handed_off: bool = False,
         ticket: Optional[Dict[str, Any]] = None,
         trace: Optional[List[Dict[str, Any]]] = None,
+        card_status: Optional[str] = None,
     ):
         self.session_id = session_id
         self.db = db if db is not None else get_fresh_db()
@@ -87,6 +88,7 @@ class SessionState:
         self.handed_off = handed_off
         self.ticket = ticket
         self.trace = trace if trace is not None else []
+        self.card_status = card_status
 
     def get(self, key: str, default: Any = None) -> Any:
         return getattr(self, key, default)
@@ -108,6 +110,7 @@ class SessionState:
             "handed_off": self.handed_off,
             "ticket": self.ticket,
             "trace": self.trace,
+            "card_status": self.card_status,
         }
 
 
@@ -176,10 +179,12 @@ def verify_customer(
     if hasattr(session, "__setitem__"):
         session["verified"] = True
         session["customer_id"] = customer["id"]
+        session["card_status"] = customer["status"]
         session["failed_attempts"] = 0
     else:
         session.verified = True
         session.customer_id = customer["id"]
+        session.card_status = customer["status"]
         session.failed_attempts = 0
 
     return {

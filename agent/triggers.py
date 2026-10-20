@@ -150,3 +150,61 @@ def check_deterministic_triggers(
             return {"trigger": "fraud", "ticket": ticket, "reply": reply}
 
     return None
+
+
+def check_frozen_card_trigger(
+    user_text: str,
+    session: SessionState | Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """
+    After a successful get_customer in the current turn, if the session's card
+    status is 'frozen' and the user's latest message mentions card/frozen/unfreeze/blocked/declined,
+    escalates directly to Security & Fraud (priority high).
+    Does NOT escalate if the user verified for an unrelated request (e.g. a refund).
+    """
+    handed_off = session.get("handed_off", False) if hasattr(session, "get") else session["handed_off"]
+    if handed_off:
+        return None
+
+    verified = session.get("verified", False) if hasattr(session, "get") else session["verified"]
+    if not verified:
+        return None
+
+    card_status = session.get("card_status") if hasattr(session, "get") else session.get("card_status")
+    if not card_status:
+        db = session.get("db") if hasattr(session, "get") else session["db"]
+        cust_id = session.get("customer_id") if hasattr(session, "get") else session["customer_id"]
+        for c in db.get("customers", {}).values():
+            if c.get("id") == cust_id:
+                card_status = c.get("status")
+                break
+
+    if card_status != "frozen":
+        return None
+
+    text_lower = user_text.lower()
+
+    # Do not escalate when a frozen customer verifies for an unrelated request (e.g. a refund)
+    if re.search(r"\b(refund|refunds|chargeback|txn_|transaction)\b", text_lower):
+        return None
+
+    # Check if user's latest message mentions card/frozen/unfreeze/blocked/declined
+    if not re.search(r"\b(card|frozen|unfreeze|blocked|declined)\b", text_lower):
+        return None
+
+    ticket = escalate_to_human(
+        session,
+        summary="Verified customer inquiry regarding frozen card status.",
+        department="Security & Fraud",
+        reason="FROZEN_CARD",
+    )
+    reply_msg = (
+        "Your card shows as frozen. I cannot see why the card is frozen or unfreeze it from here. "
+        f"I have escalated this to our Security & Fraud team under ticket {ticket['ticket_id']}. "
+        "A team member will follow up with you on your ticket."
+    )
+    return {
+        "trigger": "frozen_card",
+        "ticket": ticket,
+        "reply": reply_msg,
+    }

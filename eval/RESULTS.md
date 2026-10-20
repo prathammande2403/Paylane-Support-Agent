@@ -1,13 +1,28 @@
 # Paylane Support Agent – Evaluation Results
 
-- **Evaluated At:** 2026-10-20 08:40:58 UTC
+- **Latest Evaluation Run:** 2026-10-20 09:00:33 UTC
 - **Model:** `openai/gpt-oss-120b`
 - **Scenario Pass Rate:** **12 / 12** (100.0%)
 - **Assertion Pass Rate:** **44 / 44** (100.0%)
 
-> **Note on Architecture:** Code actions (legal, account closure, explicit human, high/normal fraud triggers, 3-strike lockout, and output PII redactions) are executed deterministically before or after the LLM. Tool arguments, customer verification state, and refund limits are enforced strictly by the FastAPI tool service layer.
+> **Note on Architecture:** Code actions (legal, account closure, explicit human, high/normal fraud triggers, verified frozen card handoff, 3-strike lockout, and output PII redactions) are executed deterministically before or after the LLM. Tool arguments, customer verification state, and refund limits are enforced strictly by the FastAPI tool service layer.
 
-## Summary Table
+## Multi-Run Evaluation History & Live Failure Analysis
+
+| Run | Timestamp | Model | Scenarios Passed | Checks Passed | Notes / Outcome |
+|:---:|---|---|:---:|:---:|---|
+| **Run 1** | 2026-10-20 08:34:33 UTC | `openai/gpt-oss-120b` | 12 / 12 (100.0%) | 44 / 44 (100.0%) | Initial evaluation passed all scenarios. |
+| **Run 2** | 2026-10-20 08:44:40 UTC | `openai/gpt-oss-120b` | 11 / 12 (91.7%) | 43 / 44 (97.7%) | **Live Failure Found:** In EC_11, model answered conversationally that card was frozen but omitted calling `escalate_to_human`. |
+| **Run 3 (After Fix)** | 2026-10-20 09:00:33 UTC | `openai/gpt-oss-120b` | **12 / 12** (100.0%) | **44 / 44** (100.0%) | Hardened with deterministic frozen-card trigger in `graph.py` & `triggers.py`. |
+
+### Live Failure Analysis & Remediation (EC_11 Frozen Card)
+- **Failure Sighting (Run 2):** In EC_11, customer verified with `user2@paylane.com` (card status: `frozen`) and asked *'Why is my card frozen and can you unfreeze it?'*. The model called `get_customer`, but in the subsequent turn responded with natural language explaining the card was frozen without calling `escalate_to_human` to hand off to Security & Fraud.
+- **Root Cause:** LLM non-determinism. Relying on the model to call an escalation tool after recognizing card status in tool output is vulnerable to omission across turns.
+- **Hardened Fix:** Added deterministic frozen-card trigger in `agent/graph.py` and `agent/triggers.py`. Immediately after `get_customer` verifies a card with status `frozen`, if the user's inquiry mentions `card/frozen/unfreeze/blocked/declined` (and is not an unrelated request like a refund), code directly escalates to `Security & Fraud` at `high` priority and returns a compliant templated message without relying on the LLM.
+
+---
+
+## Summary Table (Latest Run)
 
 | ID | Scenario | Category | Checks Passed | Status | Transcript |
 |---|---|---|:---:|:---:|---|

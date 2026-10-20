@@ -3,7 +3,7 @@
 - **Category:** Policy / Verification Boundary
 - **Rationale:** Verifies agent answers policy questions without verification, and requests credentials before revealing account details. Tests the vague 'I want my money back' clarifying question flow.
 - **Overall Status:** ✅ PASSED
-- **Evaluated At:** 2026-10-20T08:37:58.488031+00:00
+- **Evaluated At:** 2026-10-20T08:58:21.848865+00:00
 - **Model:** openai/gpt-oss-120b
 
 ---
