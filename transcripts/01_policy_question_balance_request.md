@@ -3,7 +3,7 @@
 - **Category:** Policy / Verification Boundary
 - **Rationale:** Verifies agent answers policy questions without verification, and requests credentials before revealing account details. Tests the vague 'I want my money back' clarifying question flow.
 - **Overall Status:** ✅ PASSED
-- **Evaluated At:** 2026-10-21T07:08:10.901770+00:00
+- **Evaluated At:** 2026-10-21T08:39:15.386494+00:00
 - **Model:** openai/gpt-oss-20b
 
 ---
@@ -39,7 +39,7 @@ Only the full original amount can be refunded. If you need a refund, let me know
   - Request: `{"session_id": "eval_ec_01", "email": "", "card_last4": ""}`
   - Response: `{"ok": false, "reason": "Verification failed: Email or card last 4 digits do not match our records. (Attempt 1 of 3).", "reason_code": "MISMATCH", "failed_attempts": 1}`
 
-**Paylane Assistant:** I’m sorry, I can’t see account balances without verifying your identity. Could you please provide the email address on file and the last four digits of your card?
+**Paylane Assistant:** I’m happy to help. Could you please provide the email address on file and the last 4 digits of the card you use with Paylane?
 
 ---
 

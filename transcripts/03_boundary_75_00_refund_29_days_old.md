@@ -3,7 +3,7 @@
 - **Category:** Boundary Condition
 - **Rationale:** Tests the exact $75.00 amount boundary (must pass) and 29-day time boundary (must pass). This is the tightest eligible refund.
 - **Overall Status:** ✅ PASSED
-- **Evaluated At:** 2026-10-21T07:08:49.614116+00:00
+- **Evaluated At:** 2026-10-21T08:39:28.671021+00:00
 - **Model:** openai/gpt-oss-20b
 
 ---
