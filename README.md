@@ -186,7 +186,7 @@ python -m eval.run_eval
 The project includes two distinct evaluation tiers:
 
 ### A. Deterministic Unit & Regression Test Suite
-- **Result:** {{TOTAL_TESTS}} tests, all passing, no LLM required.
+- **Result:** 124 tests, all passing, no LLM required.
 - **Test Categories:**
   - `tests/test_regressions.py`: regression tests for the bugs found in the original codebase.
   - `tests/test_service.py`: every guard, boundary, and error code in `paylane_api/service.py`.
