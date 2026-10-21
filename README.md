@@ -195,8 +195,8 @@ The project includes two distinct evaluation tiers:
 
 ### B. Live Model Evaluation (12 Scripted Scenarios)
 - **Model:** `openai/gpt-oss-20b` (Groq)
-- **Scenario Pass Rate:** **{{SCENARIOS_PASSED}} / 12**
-- **Assertion Pass Rate:** **{{ASSERTIONS_PASSED}} / {{ASSERTIONS_TOTAL}}**
+- **Scenario Pass Rate:** **12 / 12**
+- **Assertion Pass Rate:** **46 / 46**
 - **Generated Transcripts:** Located in [`transcripts/`](transcripts/) with tool calls interleaved.
 - **Detailed Report:** View [`eval/RESULTS.md`](eval/RESULTS.md) and [`eval/results.json`](eval/results.json). The report keeps the history of earlier runs.
 
