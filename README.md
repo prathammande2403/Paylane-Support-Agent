@@ -16,7 +16,7 @@ Built for the **Fini Take-Home Assignment**.
 The **Paylane Support Agent** is a hybrid AI and deterministic policy enforcement system designed to assist Paylane cardholders. It integrates:
 - A conversational interface powered by **LangGraph** and Groq (`openai/gpt-oss-20b`).
 - A hardened, pure-Python business service layer (`paylane_api/service.py`) acting as the **single source of truth** for all security rules and business policy constraints.
-- A **FastAPI** service (`paylane_api/main.py`) exposing standard REST endpoints for tool execution, chat interactions, session management, and metrics.
+- A **FastAPI** service (`paylane_api/main.py`) exposing standard REST endpoints for tool execution, chat interactions, and session management.
 - A single-page, no-build **Demo Web UI** (`static/index.html`) with real-time chat and a dropdown of the 12 evaluation scenarios.
 - A terminal-based CLI (`cli.py`) for command-line interactions.
 
@@ -42,16 +42,14 @@ flowchart TD
         SessionStore["In-Memory Session Store<br/>(TTL 30m, Cap 200)"]
     end
 
-    subgraph PreCheck["Deterministic Pre-Checks (agent/triggers.py)"]
-        Guard["Input Guardrail (agent/guardrails.py)"]
-        Triggers{"Emergency Triggers?<br/>Legal / Closure / Human / Fraud / Frozen Card"}
-        Retry{"Verification Retry?<br/>Card last-4 after a failed attempt"}
-    end
-
-    subgraph Agent["LangGraph Agent (agent/graph.py)"]
+    subgraph Agent["LangGraph Agent (agent/graph.py, agent_node)"]
+        Guard["1. Input Guardrail (agent/guardrails.py)<br/>Jailbreak / prompt-injection patterns"]
+        Triggers{"2. Emergency Triggers (agent/triggers.py)<br/>Legal / Closure / Human / Fraud"}
+        Frozen{"3. Frozen-Card Check<br/>Verified customer + frozen card"}
+        Retry{"4. Verification Retry?<br/>New card last-4 after a failed attempt"}
         PromptBuilder["Prompt Builder<br/>(+ Post-Handoff Addendum)"]
         GroqLLM["Groq LLM (openai/gpt-oss-20b)<br/>temp=0, max_retries=0"]
-        ToolWrappers["Tool Wrappers (agent/tools.py)<br/>Injected session_id, no customer_id"]
+        ToolWrappers["ToolNode / Tool Wrappers (agent/tools.py)<br/>Injected session_id, no customer_id"]
     end
 
     subgraph ServiceLayer["Core Business Logic (paylane_api/service.py)"]
@@ -74,23 +72,28 @@ flowchart TD
     API_Client --> Endpoint
     Endpoint --> RateLimit --> SessionStore
 
-    Endpoint --> PreCheck
-    PreCheck --> Guard
-    Guard --> Triggers
-    Triggers -- "Triggered (Short-Circuit)" --> EscalateRules
-    Triggers -- "Standard Turn" --> Retry
-    Retry -- "Forced get_customer call" --> ToolWrappers
-    Retry -- "Otherwise" --> Agent
+    Endpoint --> Guard
+    Guard -- "Blocked: canned reply" --> PIIFilter
+    Guard -- "Safe" --> Triggers
+    Triggers -- "Fired (short-circuit)" --> EscalateRules
+    Triggers -- "No" --> Frozen
+    Frozen -- "Fired (short-circuit)" --> EscalateRules
+    Frozen -- "No" --> Retry
+    Retry -- "Yes: forced get_customer call" --> ToolWrappers
+    Retry -- "No" --> PromptBuilder --> GroqLLM
 
-    Agent --> PromptBuilder --> GroqLLM --> ToolWrappers
+    GroqLLM -- "Tool calls" --> ToolWrappers
     ToolWrappers -- "In-Process / HTTP" --> ServiceLayer
+    ToolWrappers -- "Tool result returns to agent_node<br/>(frozen-card check re-runs after get_customer)" --> Frozen
     ServiceLayer --> MockDB
     ServiceLayer --> SessionStore
 
-    GroqLLM --> PostCheck
-    EscalateRules --> PostCheck
-    PostCheck --> Endpoint --> UI
+    GroqLLM -- "Final reply" --> PIIFilter
+    EscalateRules --> PIIFilter
+    PIIFilter --> Endpoint --> UI
 ```
+
+*Reading the diagram:* steps 1-4 all run inside the LangGraph `agent_node` before any LLM call, in the order shown. After a tool returns, control goes back to `agent_node`; if the tool was `get_customer`, the frozen-card check runs again before the LLM sees the result. A tool result for any other tool goes straight back to the LLM. The three short-circuit paths (blocked input, emergency trigger, frozen card) return a templated reply without calling the LLM.
 
 ---
 
@@ -103,7 +106,8 @@ flowchart TD
 ### Setup (Windows)
 ```powershell
 # 1. Clone repository and navigate to directory
-cd "Paylane Support Agent"
+git clone https://github.com/prathammande2403/Paylane-Support-Agent.git
+cd Paylane-Support-Agent
 
 # 2. Create virtual environment
 python -m venv venv
@@ -120,7 +124,8 @@ copy .env.example .env
 ### Setup (macOS / Linux)
 ```bash
 # 1. Clone repository and navigate to directory
-cd "Paylane Support Agent"
+git clone https://github.com/prathammande2403/Paylane-Support-Agent.git
+cd Paylane-Support-Agent
 
 # 2. Create virtual environment
 python3 -m venv venv
@@ -153,7 +158,7 @@ python -m cli
 ```
 
 ### Running Tests
-Execute the deterministic test suite ({{TOTAL_TESTS}} tests, no LLM required):
+Execute the deterministic test suite (124 tests, no LLM required):
 ```bash
 pytest
 # Or: pytest -v
@@ -186,7 +191,7 @@ python -m eval.run_eval
 The project includes two distinct evaluation tiers:
 
 ### A. Deterministic Unit & Regression Test Suite
-- **Result:** {{TOTAL_TESTS}} tests, all passing, no LLM required.
+- **Result:** 124 tests, all passing, no LLM required.
 - **Test Categories:**
   - `tests/test_regressions.py`: regression tests for the bugs found in the original codebase.
   - `tests/test_service.py`: every guard, boundary, and error code in `paylane_api/service.py`.
@@ -195,8 +200,8 @@ The project includes two distinct evaluation tiers:
 
 ### B. Live Model Evaluation (12 Scripted Scenarios)
 - **Model:** `openai/gpt-oss-20b` (Groq)
-- **Scenario Pass Rate:** **{{SCENARIOS_PASSED}} / 12**
-- **Assertion Pass Rate:** **{{ASSERTIONS_PASSED}} / {{ASSERTIONS_TOTAL}}**
+- **Scenario Pass Rate:** **12 / 12**
+- **Assertion Pass Rate:** **46 / 46**
 - **Generated Transcripts:** Located in [`transcripts/`](transcripts/) with tool calls interleaved.
 - **Detailed Report:** View [`eval/RESULTS.md`](eval/RESULTS.md) and [`eval/results.json`](eval/results.json). The report keeps the history of earlier runs.
 
@@ -218,6 +223,7 @@ Detailed assumptions are documented in [`docs/ASSUMPTIONS.md`](docs/ASSUMPTIONS.
 3. **Retry Detection Is Pattern-Based:** The verification-retry backstop recognizes phrasings such as "card 5555", "last 4 is 5555", and "ending in 5555". An unusual phrasing falls back to the model, which may skip the tool call.
 4. **No Transaction Search Tool:** Users must provide transaction IDs explicitly.
 5. **Live Evaluation Is Non-Deterministic:** Results depend on the hosted model, so a rerun can differ from the numbers reported above. The unit test suite is the deterministic guarantee.
+6. **Demo-Grade Session Endpoints:** `GET /api/sessions/{id}` and `/api/tickets/{id}` have no authentication, and the returned trace includes details the user typed in (such as their email and card last-4). This is acceptable for a prototype, but production would need authenticated sessions.
 
 ---
 
