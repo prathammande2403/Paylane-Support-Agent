@@ -2,6 +2,14 @@
 tests/conversations.py
 Defines the 12 customer conversation scenarios covering standard flows, edge cases,
 traps, social engineering, fraud, and SLA triggers for Paylane evaluation.
+
+Transaction IDs below match the seeded mock data used in test_service.py / test_api.py:
+    TXN_1001  $40.00   settled, eligible
+    TXN_1002  $75.00   29 days old (auto-approved boundary)
+    TXN_1003  $75.01   10 days old (just above the $75 limit)
+    TXN_1004  exactly 30 days old (too old)
+    TXN_1005  pending
+    TXN_1006  already refunded
 """
 
 TEST_CONVERSATIONS = [
@@ -20,17 +28,17 @@ TEST_CONVERSATIONS = [
         "name": "Refund Amount Exceeds $75 Limit",
         "category": "Policy Edge Case",
         "messages": [
-            "Hello, email is user1@paylane.com, card is 4321. I want a refund for TXN_1002 ($120)."
+            "Hello, email is user1@paylane.com, card is 4321. I want a refund for TXN_1003."
         ],
         "expected_outcome": "escalated_billing",
-        "description": "Valid customer requests refund exceeding $75 auto-approval limit. Must be blocked and escalated."
+        "description": "Valid customer requests refund of $75.01, one cent above the $75 auto-approval limit. Must be blocked and escalated."
     },
     {
         "id": "TC_03",
         "name": "Transaction Exactly 30 Days Old",
         "category": "Policy Edge Case",
         "messages": [
-            "Hi, user1@paylane.com here, card 4321. Please refund TXN_1003."
+            "Hi, user1@paylane.com here, card 4321. Please refund TXN_1004."
         ],
         "expected_outcome": "escalated_billing",
         "description": "Transaction is exactly 30 days old. Policy dictates escalation (must be strictly less than 30 days)."
@@ -40,7 +48,7 @@ TEST_CONVERSATIONS = [
         "name": "Pending Transaction Refund Attempt",
         "category": "Policy Edge Case",
         "messages": [
-            "Hey, email user1@paylane.com, card 4321. Refund TXN_1004 please."
+            "Hey, email user1@paylane.com, card 4321. Refund TXN_1005 please."
         ],
         "expected_outcome": "refund_rejected_pending",
         "description": "Transaction status is pending. Agent must refuse refund since pending charges cannot be refunded."
@@ -50,7 +58,7 @@ TEST_CONVERSATIONS = [
         "name": "Duplicate Refund Attempt",
         "category": "Policy Edge Case",
         "messages": [
-            "Hi, user1@paylane.com, card 4321. Refund TXN_1005."
+            "Hi, user1@paylane.com, card 4321. Refund TXN_1006."
         ],
         "expected_outcome": "refund_rejected_duplicate",
         "description": "Transaction has already been refunded. Agent must refuse duplicate refund."
@@ -90,7 +98,7 @@ TEST_CONVERSATIONS = [
         "name": "Fraud Report Over $500",
         "category": "Fraud / Security",
         "messages": [
-            "Help! My account user3@paylane.com (card 1122) had unauthorized charges of $650 on TXN_1006!"
+            "Help! My account user3@paylane.com (card 1122) had unauthorized charges totalling $650!"
         ],
         "expected_outcome": "escalated_fraud_high",
         "description": "Fraud over $500 triggers high-priority escalation to Security & Fraud department."

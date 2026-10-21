@@ -4,9 +4,8 @@ Deterministic unit tests for the pure-Python Paylane service layer (paylane_api/
 Tests every guard, boundary, security invariant, and error condition without calling any LLM.
 """
 
-from datetime import timedelta
 import pytest
-from data.mock_db import FIXED_TEST_CLOCK, get_fresh_db
+from data.mock_db import get_fresh_db
 from paylane_api.service import (
     SessionState,
     verify_customer,
@@ -14,77 +13,96 @@ from paylane_api.service import (
     issue_refund,
     escalate_to_human,
     reset_counters,
-    strip_pii_from_text,
 )
 
+# ---------------------------------------------------------------------------
+# Seed data used by these tests. Defined ONCE here; must match data/mock_db.py.
+# If the seed data changes, this is the only block you need to edit.
+# ---------------------------------------------------------------------------
+EMAIL = "user1@paylane.com"
+LAST4 = "4321"
+CUSTOMER_ID = "cust_101"
 
+TXN_BASIC = "TXN_1001"            # $40.00, refundable
+TXN_AT_LIMIT = "TXN_1002"         # $75.00, 29 days old -> auto-approved
+TXN_OVER_LIMIT = "TXN_1003"       # $75.01, 10 days old -> above limit
+TXN_30_DAYS_OLD = "TXN_1004"      # exactly 30 days old -> too old
+TXN_PENDING = "TXN_1005"          # still pending
+TXN_FUTURE = "TXN_FUTURE"         # dated in the future
+TXN_OTHER_CUSTOMER = "TXN_2001"   # belongs to cust_104, not cust_101
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
 @pytest.fixture(autouse=True)
-def setup_teardown():
+def reset_state():
     reset_counters()
 
 
-def create_test_session(session_id="test-session"):
-    return SessionState(session_id=session_id, db=get_fresh_db())
+@pytest.fixture
+def make_session():
+    """Factory for fresh sessions, for tests that need more than one."""
+    def _make(session_id="test-session"):
+        return SessionState(session_id=session_id, db=get_fresh_db())
+    return _make
 
 
-def test_unverified_read_and_refund_blocked():
-    session = create_test_session()
-    read_res = get_transaction(session, "TXN_1001")
+@pytest.fixture
+def session(make_session):
+    return make_session()
+
+
+@pytest.fixture
+def verified_session(session):
+    result = verify_customer(session, EMAIL, LAST4)
+    assert result["ok"] is True
+    return session
+
+
+# ---------------------------------------------------------------------------
+# Verification and identity
+# ---------------------------------------------------------------------------
+def test_unverified_read_and_refund_blocked(session):
+    read_res = get_transaction(session, TXN_BASIC)
     assert read_res["ok"] is False
     assert read_res["reason_code"] == "UNVERIFIED"
 
-    refund_res = issue_refund(session, "TXN_1001")
+    refund_res = issue_refund(session, TXN_BASIC)
     assert refund_res["ok"] is False
     assert refund_res["reason_code"] == "UNVERIFIED"
 
 
-def test_identity_cannot_be_overridden():
-    session = create_test_session()
-    # Verify as user1 (cust_101)
-    v_res = verify_customer(session, "user1@paylane.com", "4321")
-    assert v_res["ok"] is True
-    assert session.customer_id == "cust_101"
+def test_identity_cannot_be_overridden(verified_session):
+    assert verified_session.customer_id == CUSTOMER_ID
 
-    # TXN_2001 belongs to cust_104
-    read_res = get_transaction(session, "TXN_2001")
+    read_res = get_transaction(verified_session, TXN_OTHER_CUSTOMER)
     assert read_res["ok"] is False
     assert read_res["reason_code"] == "NOT_FOUND"
 
-    refund_res = issue_refund(session, "TXN_2001")
+    refund_res = issue_refund(verified_session, TXN_OTHER_CUSTOMER)
     assert refund_res["ok"] is False
     assert refund_res["reason_code"] == "NOT_FOUND"
 
 
-def test_wrong_email_and_wrong_last4_give_identical_messages():
-    session1 = create_test_session("s1")
-    session2 = create_test_session("s2")
+def test_wrong_email_and_wrong_last4_give_identical_messages(make_session):
+    unknown_email = verify_customer(make_session("s1"), "unknown@paylane.com", LAST4)
+    wrong_last4 = verify_customer(make_session("s2"), EMAIL, "9999")
 
-    # Unknown email
-    res1 = verify_customer(session1, "unknown@paylane.com", "4321")
-    # Wrong last4
-    res2 = verify_customer(session2, "user1@paylane.com", "9999")
-
-    assert res1["ok"] is False
-    assert res2["ok"] is False
-    assert res1["reason"] == res2["reason"]
-    assert res1["reason_code"] == res2["reason_code"] == "MISMATCH"
+    assert unknown_email["ok"] is False
+    assert wrong_last4["ok"] is False
+    assert unknown_email["reason"] == wrong_last4["reason"]
+    assert unknown_email["reason_code"] == wrong_last4["reason_code"] == "MISMATCH"
 
 
-def test_three_strike_lockout_then_correct_credentials_rejected():
-    session = create_test_session()
+def test_three_strike_lockout_then_correct_credentials_rejected(session):
+    for expected_failures in (1, 2):
+        res = verify_customer(session, EMAIL, "0000")
+        assert res["ok"] is False
+        assert session.failed_attempts == expected_failures
 
-    # Attempt 1
-    r1 = verify_customer(session, "user1@paylane.com", "0000")
-    assert r1["ok"] is False
-    assert session.failed_attempts == 1
-
-    # Attempt 2
-    r2 = verify_customer(session, "user1@paylane.com", "0000")
-    assert r2["ok"] is False
-    assert session.failed_attempts == 2
-
-    # Attempt 3 - locks session
-    r3 = verify_customer(session, "user1@paylane.com", "0000")
+    # Third failure locks the session and hands off
+    r3 = verify_customer(session, EMAIL, "0000")
     assert r3["ok"] is False
     assert r3["reason_code"] == "LOCKED"
     assert session.handed_off is True
@@ -92,109 +110,78 @@ def test_three_strike_lockout_then_correct_credentials_rejected():
     assert session.ticket["department"] == "Account Operations"
     assert session.ticket["priority"] == "high"
 
-    # Attempt 4 - correct credentials
-    r4 = verify_customer(session, "user1@paylane.com", "4321")
+    # Correct credentials no longer work once locked
+    r4 = verify_customer(session, EMAIL, LAST4)
     assert r4["ok"] is False
     assert r4["reason_code"] == "LOCKED"
     assert session.verified is False
 
 
-def test_refund_amount_boundaries():
-    session = create_test_session()
-    verify_customer(session, "user1@paylane.com", "4321")
+def test_verification_state_does_not_leak_between_sessions(make_session):
+    session1 = make_session("s1")
+    session2 = make_session("s2")
 
-    # $75.00 auto-approved (TXN_1002, 29 days old)
-    r75 = issue_refund(session, "TXN_1002")
-    assert r75["ok"] is True
-    assert r75["refund_id"] == "REF-0001"
+    verify_customer(session1, EMAIL, LAST4)
+    assert session1.verified is True
 
-    # $75.01 escalates (TXN_1003, 10 days old)
-    r7501 = issue_refund(session, "TXN_1003")
-    assert r7501["ok"] is False
-    assert r7501["reason_code"] == "ABOVE_LIMIT"
-
-
-def test_refund_time_boundaries():
-    session = create_test_session()
-    verify_customer(session, "user1@paylane.com", "4321")
-
-    # 29 days old (TXN_1002) is approved
-    r29 = issue_refund(session, "TXN_1002")
-    assert r29["ok"] is True
-
-    # Exactly 30 days old (TXN_1004) escalates
-    r30 = issue_refund(session, "TXN_1004")
-    assert r30["ok"] is False
-    assert r30["reason_code"] == "TOO_OLD"
+    assert session2.verified is False
+    assert session2.customer_id is None
+    # The DB record's verified flag is untouched in both sessions
+    assert session1.db["customers"][EMAIL]["verified"] is False
+    assert session2.db["customers"][EMAIL]["verified"] is False
 
 
-def test_future_dated_transaction_rejected():
-    session = create_test_session()
-    verify_customer(session, "user1@paylane.com", "4321")
+# ---------------------------------------------------------------------------
+# Refunds
+# ---------------------------------------------------------------------------
+def test_refund_at_amount_limit_is_approved(verified_session):
+    """$75.00 is auto-approved."""
+    res = issue_refund(verified_session, TXN_AT_LIMIT)
+    assert res["ok"] is True
+    assert res["refund_id"] == "REF-0001"
 
-    # TXN_FUTURE is dated in future
-    res = issue_refund(session, "TXN_FUTURE")
+
+@pytest.mark.parametrize("txn_id, reason_code", [
+    (TXN_OVER_LIMIT, "ABOVE_LIMIT"),       # $75.01
+    (TXN_30_DAYS_OLD, "TOO_OLD"),          # exactly 30 days
+    (TXN_FUTURE, "FUTURE_DATED"),
+    (TXN_PENDING, "PENDING"),
+])
+def test_refund_rejections(verified_session, txn_id, reason_code):
+    res = issue_refund(verified_session, txn_id)
     assert res["ok"] is False
-    assert res["reason_code"] == "FUTURE_DATED"
+    assert res["reason_code"] == reason_code
 
 
-def test_partial_and_zero_negative_amounts_rejected():
-    session = create_test_session()
-    verify_customer(session, "user1@paylane.com", "4321")
-
-    # Full amount is 40.00
-    r_part = issue_refund(session, "TXN_1001", amount=20.00)
-    assert r_part["ok"] is False
-    assert r_part["reason_code"] == "PARTIAL_NOT_ALLOWED"
-
-    r_zero = issue_refund(session, "TXN_1001", amount=0.0)
-    assert r_zero["ok"] is False
-    assert r_zero["reason_code"] == "PARTIAL_NOT_ALLOWED"
-
-    r_neg = issue_refund(session, "TXN_1001", amount=-10.0)
-    assert r_neg["ok"] is False
-    assert r_neg["reason_code"] == "PARTIAL_NOT_ALLOWED"
-
-
-def test_pending_rejected():
-    session = create_test_session()
-    verify_customer(session, "user1@paylane.com", "4321")
-
-    res = issue_refund(session, "TXN_1005")
+@pytest.mark.parametrize("amount", [20.00, 0.0, -10.0])
+def test_partial_zero_and_negative_amounts_rejected(verified_session, amount):
+    """Full amount of TXN_BASIC is 40.00; anything else is not allowed."""
+    res = issue_refund(verified_session, TXN_BASIC, amount=amount)
     assert res["ok"] is False
-    assert res["reason_code"] == "PENDING"
+    assert res["reason_code"] == "PARTIAL_NOT_ALLOWED"
 
 
-def test_double_refund_rejected_and_idempotent():
-    session = create_test_session()
-    verify_customer(session, "user1@paylane.com", "4321")
+def test_double_refund_rejected_and_idempotent(verified_session):
+    assert issue_refund(verified_session, TXN_BASIC)["ok"] is True
 
-    # First refund succeeds
-    r1 = issue_refund(session, "TXN_1001")
-    assert r1["ok"] is True
-
-    # Second refund for same txn is rejected
-    r2 = issue_refund(session, "TXN_1001")
+    r2 = issue_refund(verified_session, TXN_BASIC)
     assert r2["ok"] is False
     assert r2["reason_code"] == "ALREADY_REFUNDED"
 
 
-def test_no_refund_after_handoff():
-    session = create_test_session()
-    verify_customer(session, "user1@paylane.com", "4321")
+def test_no_refund_after_handoff(verified_session):
+    escalate_to_human(verified_session, summary="Customer requested agent", department="General Support")
+    assert verified_session.handed_off is True
 
-    # Handoff occurs
-    escalate_to_human(session, summary="Customer requested agent", department="General Support")
-    assert session.handed_off is True
-
-    # Subsequent refund attempt blocked
-    res = issue_refund(session, "TXN_1001")
+    res = issue_refund(verified_session, TXN_BASIC)
     assert res["ok"] is False
     assert res["reason_code"] == "HANDED_OFF"
 
 
-def test_second_escalation_returns_same_ticket():
-    session = create_test_session()
+# ---------------------------------------------------------------------------
+# Escalation
+# ---------------------------------------------------------------------------
+def test_second_escalation_returns_same_ticket(session):
     t1 = escalate_to_human(session, summary="First issue", department="General Support")
     assert t1["ticket_id"] == "TCK-0001"
 
@@ -203,40 +190,25 @@ def test_second_escalation_returns_same_ticket():
     assert t1 == t2
 
 
-def test_priority_computation():
-    session1 = create_test_session("s1")
-    t1 = escalate_to_human(session1, summary="Fraud report", department="Security & Fraud", reported_loss_usd=650.0)
-    assert t1["priority"] == "high"
+@pytest.mark.parametrize("loss, priority", [
+    (650.0, "high"),
+    (499.0, "normal"),
+    (None, "normal"),
+])
+def test_priority_computation(make_session, loss, priority):
+    ticket = escalate_to_human(
+        make_session(),
+        summary="Fraud report",
+        department="Security & Fraud",
+        reported_loss_usd=loss,
+    )
+    assert ticket["priority"] == priority
 
-    session2 = create_test_session("s2")
-    t2 = escalate_to_human(session2, summary="Small charge", department="Security & Fraud", reported_loss_usd=499.0)
-    assert t2["priority"] == "normal"
 
-    session3 = create_test_session("s3")
-    t3 = escalate_to_human(session3, summary="Unknown amount", department="Security & Fraud", reported_loss_usd=None)
-    assert t3["priority"] == "normal"
-
-
-def test_summaries_stripped_of_pii():
-    session = create_test_session()
+def test_summaries_stripped_of_pii(session):
     raw_summary = "Fraud on user1@paylane.com with card 4111222233334444 ending in 4444"
     ticket = escalate_to_human(session, summary=raw_summary, department="Security & Fraud")
     assert "user1@paylane.com" not in ticket["summary"]
     assert "4111222233334444" not in ticket["summary"]
     assert "[redacted]" in ticket["summary"]
-    assert "4444" in ticket["summary"]  # Bare 4 digits preserved
-
-
-def test_verification_state_does_not_leak_between_sessions():
-    session1 = create_test_session("s1")
-    session2 = create_test_session("s2")
-
-    verify_customer(session1, "user1@paylane.com", "4321")
-    assert session1.verified is True
-
-    # session2 should be completely clean
-    assert session2.verified is False
-    assert session2.customer_id is None
-    # DB record verified is still False
-    assert session1.db["customers"]["user1@paylane.com"]["verified"] is False
-    assert session2.db["customers"]["user1@paylane.com"]["verified"] is False
+    assert "4444" in ticket["summary"]  # bare last 4 digits preserved
