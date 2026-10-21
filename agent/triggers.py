@@ -5,12 +5,13 @@ Deterministic pre-checks for emergency conditions:
 - Account closure / deletion -> Account Operations
 - Explicit human agent request -> General Support
 - Fraud / unauthorized charges reports -> Security & Fraud
+- Verification retries after a failed attempt (so the 3-strike lockout always counts)
 All handoffs use templated summaries without raw user PII.
 """
 
 from __future__ import annotations
 import re
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 from paylane_api.service import SessionState, escalate_to_human
 
 
@@ -148,6 +149,54 @@ def check_deterministic_triggers(
                 f"{ticket['ticket_id']}. A specialist will follow up with you."
             )
             return {"trigger": "fraud", "ticket": ticket, "reply": reply}
+
+    return None
+
+
+_EMAIL_PATTERN = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
+
+# "card 5555", "card is 0000", "last 4 4321", "ending in 4321"
+_CARD_LAST4_PATTERN = re.compile(
+    r"(?:\bcard\b|\blast\s*4\b|\bending\b)[^0-9]{0,25}(\d{4})\b",
+    re.IGNORECASE,
+)
+
+
+def check_verification_retry(
+    user_text: str,
+    human_texts: List[str],
+    session: SessionState | Dict[str, Any],
+) -> Optional[Dict[str, str]]:
+    """
+    Deterministic backstop for the 3-strike lockout.
+
+    The lockout lives in the service layer, but it only counts attempts that actually
+    reach get_customer. If the model answers a retry such as "Try card 5555." with a
+    clarifying question instead of calling the tool, the attempt is never counted.
+
+    Once a customer has failed verification at least once, a new card last-4 therefore
+    always produces a get_customer call built in code. Returns
+    {"email": ..., "card_last4": ...}, or None when no forced call applies.
+    First attempts are left to the model.
+
+    human_texts: every human message so far, oldest first, including user_text.
+    """
+    handed_off = session.get("handed_off", False) if hasattr(session, "get") else session["handed_off"]
+    verified = session.get("verified", False) if hasattr(session, "get") else session["verified"]
+    failed_attempts = session.get("failed_attempts", 0) if hasattr(session, "get") else session["failed_attempts"]
+
+    if handed_off or verified or failed_attempts < 1:
+        return None
+
+    card = _CARD_LAST4_PATTERN.search(user_text or "")
+    if not card:
+        return None
+
+    # Reuse the most recent email the customer gave (earlier turn or this one)
+    for text in reversed(human_texts):
+        email = _EMAIL_PATTERN.search(text)
+        if email:
+            return {"email": email.group(0), "card_last4": card.group(1)}
 
     return None
 

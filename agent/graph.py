@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import time
 from typing import Annotated, Any, Dict, List, Optional, TypedDict
+from uuid import uuid4
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_groq import ChatGroq
@@ -26,7 +27,11 @@ from agent.tools import (
     issue_refund,
     _get_session_id,
 )
-from agent.triggers import check_deterministic_triggers, check_frozen_card_trigger
+from agent.triggers import (
+    check_deterministic_triggers,
+    check_frozen_card_trigger,
+    check_verification_retry,
+)
 from paylane_api.sessions import session_store
 
 
@@ -63,6 +68,19 @@ def get_last_user_message(messages: List[Any]) -> str:
         if isinstance(msg, dict) and msg.get("role") in ("user", "human"):
             return str(msg.get("content", ""))
     return ""
+
+
+def get_human_texts(messages: List[Any]) -> List[str]:
+    """Text of every human message in the conversation, oldest first."""
+    texts: List[str] = []
+    for msg in messages:
+        if isinstance(msg, tuple) and len(msg) == 2 and msg[0] in ("user", "human"):
+            texts.append(str(msg[1]))
+        elif isinstance(msg, dict) and msg.get("role") in ("user", "human"):
+            texts.append(str(msg.get("content", "")))
+        elif getattr(msg, "type", None) == "human":
+            texts.append(str(getattr(msg, "content", "")))
+    return texts
 
 
 def agent_node(state: PaylaneState, config: Optional[RunnableConfig] = None) -> Dict[str, Any]:
@@ -131,6 +149,31 @@ def agent_node(state: PaylaneState, config: Optional[RunnableConfig] = None) -> 
                 "messages": [AIMessage(content=sanitized_reply)],
                 "escalated": True,
                 "ticket_details": frozen_res["ticket"],
+                "is_verified": session.verified,
+                "customer_id": session.customer_id,
+                "failed_attempts": session.failed_attempts,
+            }
+
+        # Deterministic verification retry: a new card last-4 after a failed attempt always
+        # reaches get_customer, so the 3-strike lockout cannot be skipped by the model.
+        retry_args = check_verification_retry(user_text, get_human_texts(state["messages"]), session)
+        if retry_args:
+            session.trace.append({
+                "step": "forced_verification",
+                "card_last4": retry_args["card_last4"],
+            })
+            return {
+                "messages": [AIMessage(
+                    content="",
+                    tool_calls=[{
+                        "name": "get_customer",
+                        "args": retry_args,
+                        "id": f"call_{uuid4().hex[:12]}",
+                        "type": "tool_call",
+                    }],
+                )],
+                "escalated": session.handed_off,
+                "ticket_details": session.ticket,
                 "is_verified": session.verified,
                 "customer_id": session.customer_id,
                 "failed_attempts": session.failed_attempts,

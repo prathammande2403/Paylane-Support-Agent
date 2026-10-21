@@ -1,6 +1,7 @@
 """
 tests/test_triggers.py
-Tests for deterministic emergency triggers (legal, closure, human, fraud).
+Tests for deterministic emergency triggers (legal, closure, human, fraud),
+the frozen-card trigger, and the verification-retry backstop.
 No LLM required.
 """
 
@@ -11,6 +12,7 @@ from agent.triggers import (
     check_deterministic_triggers,
     parse_reported_dollar_amounts,
     check_frozen_card_trigger,
+    check_verification_retry,
 )
 
 
@@ -19,156 +21,89 @@ def setup():
     reset_counters()
 
 
-def make_session():
-    return SessionState(session_id="trigger-test", db=get_fresh_db())
+def make_session(**kwargs):
+    return SessionState(session_id="trigger-test", db=get_fresh_db(), **kwargs)
 
 
 # --- Legal triggers ---
-def test_legal_keyword_lawyer():
+@pytest.mark.parametrize("message", [
+    "I have a lawyer and will sue you.",
+    "I'm filing a lawsuit against Paylane.",
+    "My attorney will contact you shortly.",
+    "I'll report this to the regulator.",
+    "I'm filing a CFPB complaint.",
+    "This matter will be decided in court.",
+    "My solicitor will be in touch.",
+])
+def test_legal_triggers(message):
     s = make_session()
-    res = check_deterministic_triggers("I have a lawyer and will sue you.", s)
+    assert s.verified is False  # legal handoff must not require verification
+    res = check_deterministic_triggers(message, s)
     assert res is not None
     assert res["trigger"] == "legal"
     assert res["ticket"]["department"] == "Legal & Compliance"
+    assert res["ticket"]["customer_id"] == "GUEST"
     assert s.handed_off is True
 
 
-def test_legal_keyword_lawsuit():
-    s = make_session()
-    res = check_deterministic_triggers("I'm filing a lawsuit against Paylane.", s)
-    assert res is not None and res["trigger"] == "legal"
-
-
-def test_legal_keyword_attorney():
-    s = make_session()
-    res = check_deterministic_triggers("My attorney will contact you shortly.", s)
-    assert res is not None and res["trigger"] == "legal"
-
-
-def test_legal_keyword_regulator():
-    s = make_session()
-    res = check_deterministic_triggers("I'll report this to the regulator.", s)
-    assert res is not None and res["trigger"] == "legal"
-
-
-def test_legal_keyword_cfpb():
-    s = make_session()
-    res = check_deterministic_triggers("I'm filing a CFPB complaint.", s)
-    assert res is not None and res["trigger"] == "legal"
-
-
-def test_legal_keyword_court():
-    s = make_session()
-    res = check_deterministic_triggers("This matter will be decided in court.", s)
-    assert res is not None and res["trigger"] == "legal"
-
-
-def test_legal_no_verification_needed():
-    """Legal handoff must not require verification."""
-    s = make_session()
-    assert s.verified is False
-    res = check_deterministic_triggers("My solicitor will be in touch.", s)
-    assert res is not None
-    assert res["trigger"] == "legal"
-    # Ticket exists without verification
-    assert res["ticket"]["customer_id"] == "GUEST"
-
-
 # --- Account closure triggers ---
-def test_closure_close_my_account():
+@pytest.mark.parametrize("message", [
+    "I want to close my account.",
+    "Please delete my account immediately.",
+    "I'd like to cancel my Paylane account.",
+    "Close my account.",
+])
+def test_closure_triggers(message):
     s = make_session()
-    res = check_deterministic_triggers("I want to close my account.", s)
-    assert res is not None and res["trigger"] == "account_closure"
-    assert res["ticket"]["department"] == "Account Operations"
-
-
-def test_closure_delete_account():
-    s = make_session()
-    res = check_deterministic_triggers("Please delete my account immediately.", s)
-    assert res is not None and res["trigger"] == "account_closure"
-
-
-def test_closure_cancel_account():
-    s = make_session()
-    res = check_deterministic_triggers("I'd like to cancel my Paylane account.", s)
-    assert res is not None and res["trigger"] == "account_closure"
-
-
-def test_closure_no_verification_needed():
-    """Account closure must not require verification."""
-    s = make_session()
-    res = check_deterministic_triggers("Close my account.", s)
+    res = check_deterministic_triggers(message, s)
     assert res is not None
+    assert res["trigger"] == "account_closure"
+    assert res["ticket"]["department"] == "Account Operations"
     assert s.handed_off is True
 
 
 # --- Explicit human triggers ---
-def test_human_speak_to_someone():
+@pytest.mark.parametrize("message", [
+    "I want to speak to someone.",
+    "I need to talk to a real person.",
+    "Connect me to a human representative.",
+    "I don't want to talk to an AI.",
+    "I want a human agent.",
+])
+def test_human_triggers(message):
     s = make_session()
-    res = check_deterministic_triggers("I want to speak to someone.", s)
-    assert res is not None and res["trigger"] == "explicit_human"
-    assert res["ticket"]["department"] == "General Support"
-
-
-def test_human_real_person():
-    s = make_session()
-    res = check_deterministic_triggers("I need to talk to a real person.", s)
-    assert res is not None and res["trigger"] == "explicit_human"
-
-
-def test_human_representative():
-    s = make_session()
-    res = check_deterministic_triggers("Connect me to a human representative.", s)
-    assert res is not None and res["trigger"] == "explicit_human"
-
-
-def test_human_dont_want_to_talk_to_ai():
-    s = make_session()
-    res = check_deterministic_triggers("I don't want to talk to an AI.", s)
-    assert res is not None and res["trigger"] == "explicit_human"
-
-
-def test_human_no_verification_needed():
-    """Human request must not require verification."""
-    s = make_session()
-    res = check_deterministic_triggers("I want a human agent.", s)
+    res = check_deterministic_triggers(message, s)
     assert res is not None
+    assert res["trigger"] == "explicit_human"
+    assert res["ticket"]["department"] == "General Support"
     assert s.handed_off is True
 
 
 # --- Fraud triggers ---
-def test_fraud_high_priority_650():
-    """Loss > $500 must produce high priority."""
+@pytest.mark.parametrize("message, priority, loss", [
+    ("There were unauthorized charges totalling $650.", "high", 650.0),
+    ("I see an unauthorized charge of $200.", "normal", 200.0),
+    ("Someone used my card without my permission!", "normal", None),
+])
+def test_fraud_priority_and_loss(message, priority, loss):
+    """Loss > $500 -> high priority; <= $500 or no amount -> normal."""
     s = make_session()
-    res = check_deterministic_triggers("There were unauthorized charges totalling $650.", s)
+    res = check_deterministic_triggers(message, s)
     assert res is not None and res["trigger"] == "fraud"
     assert res["ticket"]["department"] == "Security & Fraud"
-    assert res["ticket"]["priority"] == "high"
-    assert res["ticket"]["reported_loss_usd"] == 650.0
+    assert res["ticket"]["priority"] == priority
+    assert res["ticket"]["reported_loss_usd"] == loss
 
 
-def test_fraud_normal_priority_200():
-    """Loss <= $500 must produce normal priority."""
+@pytest.mark.parametrize("message", [
+    "I did not make this charge.",
+    "My card was stolen.",
+    "I think my account was hacked.",
+])
+def test_fraud_keywords(message):
     s = make_session()
-    res = check_deterministic_triggers("I see an unauthorized charge of $200.", s)
+    res = check_deterministic_triggers(message, s)
     assert res is not None and res["trigger"] == "fraud"
-    assert res["ticket"]["priority"] == "normal"
-
-
-def test_fraud_normal_priority_no_amount():
-    """No dollar amount must produce normal priority."""
-    s = make_session()
-    res = check_deterministic_triggers("Someone used my card without my permission!", s)
-    assert res is not None and res["trigger"] == "fraud"
-    assert res["ticket"]["priority"] == "normal"
-    assert res["ticket"]["reported_loss_usd"] is None
-
-
-def test_fraud_how_do_you_prevent_fraud_does_NOT_trigger():
-    """Generic fraud question must NOT trigger fraud escalation."""
-    s = make_session()
-    res = check_deterministic_triggers("How do you prevent fraud?", s)
-    assert res is None
 
 
 def test_fraud_card_ending_digits_not_dollar_amount():
@@ -176,70 +111,52 @@ def test_fraud_card_ending_digits_not_dollar_amount():
     s = make_session()
     res = check_deterministic_triggers("I see an unauthorized charge on card ending 4242.", s)
     assert res is not None and res["trigger"] == "fraud"
-    # 4242 must not be treated as dollar amount
     assert res["ticket"]["reported_loss_usd"] is None or res["ticket"]["reported_loss_usd"] < 4242
 
 
-def test_fraud_did_not_make():
+# --- Messages that must NOT trigger ---
+@pytest.mark.parametrize("message", [
+    "How do you prevent fraud?",
+    "Thanks for your courtesy.",
+    "Can you help me with my balance?",
+])
+def test_no_trigger_for_benign_messages(message):
     s = make_session()
-    res = check_deterministic_triggers("I did not make this charge.", s)
-    assert res is not None and res["trigger"] == "fraud"
-
-
-def test_fraud_stolen():
-    s = make_session()
-    res = check_deterministic_triggers("My card was stolen.", s)
-    assert res is not None and res["trigger"] == "fraud"
-
-
-def test_fraud_hacked():
-    s = make_session()
-    res = check_deterministic_triggers("I think my account was hacked.", s)
-    assert res is not None and res["trigger"] == "fraud"
+    assert check_deterministic_triggers(message, s) is None
+    assert s.handed_off is False
 
 
 # --- Session already handed off: no duplicate trigger ---
 def test_no_duplicate_trigger_when_handed_off():
-    """If session is already handed off, triggers must be skipped."""
     s = make_session()
     s.handed_off = True
-    res = check_deterministic_triggers("My lawyer is on the way.", s)
-    assert res is None  # No new ticket
+    assert check_deterministic_triggers("My lawyer is on the way.", s) is None
 
 
 # --- Dollar amount parsing ---
-def test_dollar_sign_parsed():
-    assert parse_reported_dollar_amounts("Lost $650 total") == 650.0
-
-
-def test_usd_suffix_parsed():
-    assert parse_reported_dollar_amounts("lost 200 USD") == 200.0
-
-
-def test_dollars_word_parsed():
-    assert parse_reported_dollar_amounts("about 500 dollars") == 500.0
-
-
-def test_plain_number_not_parsed():
-    """Plain number without $ / USD / dollars context must not be parsed."""
-    result = parse_reported_dollar_amounts("TXN_1234 4242 ending in 4242")
-    assert result is None
-
-
-def test_multiple_amounts_summed():
-    """Multiple $ amounts in same message should be summed."""
-    result = parse_reported_dollar_amounts("I see $100 and $200 in charges")
-    assert result == 300.0
+@pytest.mark.parametrize("text, expected", [
+    ("Lost $650 total", 650.0),
+    ("lost 200 USD", 200.0),
+    ("about 500 dollars", 500.0),
+    ("TXN_1234 4242 ending in 4242", None),     # plain numbers are not amounts
+    ("I see $100 and $200 in charges", 300.0),  # multiple amounts are summed
+])
+def test_parse_reported_dollar_amounts(text, expected):
+    assert parse_reported_dollar_amounts(text) == expected
 
 
 # --- Frozen Card Trigger Tests ---
-def test_frozen_card_trigger_escalates():
-    """Verified customer inquiring about frozen card triggers Security & Fraud high priority."""
+def make_frozen_session():
     s = make_session()
     s.verified = True
     s.customer_id = "cust_102"
     s.card_status = "frozen"
+    return s
 
+
+def test_frozen_card_trigger_escalates():
+    """Verified customer inquiring about frozen card triggers Security & Fraud high priority."""
+    s = make_frozen_session()
     res = check_frozen_card_trigger("Why is my card frozen and can you unfreeze it?", s)
     assert res is not None
     assert res["trigger"] == "frozen_card"
@@ -250,12 +167,66 @@ def test_frozen_card_trigger_escalates():
 
 
 def test_frozen_card_unrelated_refund_does_not_trigger():
-    """A verified customer with a frozen card requesting an unrelated refund must not trigger frozen card escalation."""
-    s = make_session()
-    s.verified = True
-    s.customer_id = "cust_102"
-    s.card_status = "frozen"
-
+    """An unrelated refund request must not trigger frozen card escalation."""
+    s = make_frozen_session()
     res = check_frozen_card_trigger("Please refund TXN_1001.", s)
     assert res is None
     assert s.handed_off is False
+
+
+# --- Verification retry backstop (3-strike lockout must not depend on the model) ---
+RETRY_EMAIL = "user1@paylane.com"
+RETRY_HISTORY = [
+    f"My email is {RETRY_EMAIL} and card is 9999.",
+    "Try card 5555.",
+]
+
+
+def test_retry_after_failure_reuses_earlier_email():
+    s = make_session(failed_attempts=1)
+    res = check_verification_retry("Try card 5555.", RETRY_HISTORY, s)
+    assert res == {"email": RETRY_EMAIL, "card_last4": "5555"}
+
+
+@pytest.mark.parametrize("text, last4", [
+    ("Still me, card is 0000.", "0000"),
+    ("Now use card 4321.", "4321"),
+    ("last 4 is 1234", "1234"),
+    ("it's the one ending in 7777", "7777"),
+])
+def test_retry_recognises_phrasings(text, last4):
+    s = make_session(failed_attempts=2)
+    res = check_verification_retry(text, RETRY_HISTORY, s)
+    assert res is not None and res["card_last4"] == last4
+
+
+def test_retry_first_attempt_is_left_to_the_model():
+    s = make_session(failed_attempts=0)
+    assert check_verification_retry("Try card 5555.", RETRY_HISTORY, s) is None
+
+
+def test_retry_without_any_email_returns_none():
+    s = make_session(failed_attempts=1)
+    assert check_verification_retry("Try card 5555.", ["card is 9999", "Try card 5555."], s) is None
+
+
+def test_retry_skipped_when_verified():
+    s = make_session(failed_attempts=1)
+    s.verified = True
+    assert check_verification_retry("Try card 5555.", RETRY_HISTORY, s) is None
+
+
+def test_retry_skipped_when_handed_off():
+    s = make_session(failed_attempts=3)
+    s.handed_off = True
+    assert check_verification_retry("Try card 5555.", RETRY_HISTORY, s) is None
+
+
+@pytest.mark.parametrize("text", [
+    "Please refund TXN_1001.",          # a transaction ID is not a card
+    "I was charged $7500 yesterday.",   # an amount is not a card
+    "What are your refund rules?",
+])
+def test_retry_ignores_unrelated_messages(text):
+    s = make_session(failed_attempts=1)
+    assert check_verification_retry(text, RETRY_HISTORY, s) is None

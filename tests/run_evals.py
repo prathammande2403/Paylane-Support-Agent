@@ -21,7 +21,7 @@ import json
 from datetime import datetime, timezone
 from agent.graph import paylane_graph
 from data.mock_db import reset_mock_db
-from tests.conversations import TEST_CONVERSATIONS
+from eval.conversations import TEST_CONVERSATIONS
 
 TRANSCRIPT_DIR = "transcripts"
 
