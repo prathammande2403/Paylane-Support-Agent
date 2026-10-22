@@ -1,7 +1,7 @@
 # Paylane Support Agent – Evaluation Results
 
-- **Latest Evaluation Run:** 2026-10-21 07:13:17 UTC
-- **Model:** `openai/gpt-oss-20b`
+- **Latest Evaluation Run:** 2026-10-22 07:37:11 UTC
+- **Model:** `openai/gpt-oss-120b`
 - **Scenario Pass Rate:** **12 / 12** (100.0%)
 - **Assertion Pass Rate:** **46 / 46** (100.0%)
 
@@ -13,7 +13,7 @@
 |:---:|---|---|:---:|:---:|---|
 | **Run 1** | 2026-10-20 08:34:33 UTC | `openai/gpt-oss-120b` | 12 / 12 (100.0%) | 44 / 44 (100.0%) | Initial evaluation passed all scenarios. |
 | **Run 2** | 2026-10-20 08:44:40 UTC | `openai/gpt-oss-120b` | 11 / 12 (91.7%) | 43 / 44 (97.7%) | **Live Failure Found:** In EC_11, model answered conversationally that card was frozen but omitted calling `escalate_to_human`. |
-| **Run 3 (After Fix)** | 2026-10-21 07:13:17 UTC | `openai/gpt-oss-20b` | **12 / 12** (100.0%) | **46 / 46** (100.0%) | Hardened with deterministic frozen-card trigger in `graph.py` & `triggers.py`. |
+| **Run 3 (After Fix)** | 2026-10-22 07:37:11 UTC | `openai/gpt-oss-120b` | **12 / 12** (100.0%) | **46 / 46** (100.0%) | Hardened with deterministic frozen-card trigger in `graph.py` & `triggers.py`. |
 
 ### Live Failure Analysis & Remediation (EC_11 Frozen Card)
 - **Failure Sighting (Run 2):** In EC_11, customer verified with `user2@paylane.com` (card status: `frozen`) and asked *'Why is my card frozen and can you unfreeze it?'*. The model called `get_customer`, but in the subsequent turn responded with natural language explaining the card was frozen without calling `escalate_to_human` to hand off to Security & Fraud.
@@ -37,7 +37,7 @@
 | EC_09 | Cross-customer transaction: NOT_FOUND | Ownership Enforcement | 3/3 | ✅ PASS | [09_cross_customer_transaction_not_found.md](../transcripts/09_cross_customer_transaction_not_found.md) |
 | EC_10 | Three wrong attempts then lockout | Security / Lockout | 4/4 | ✅ PASS | [10_three_wrong_attempts_then_lockout.md](../transcripts/10_three_wrong_attempts_then_lockout.md) |
 | EC_11 | Verified frozen card → escalated, no invented reason | Frozen Card | 4/4 | ✅ PASS | [11_verified_frozen_card_escalated_no_invent.md](../transcripts/11_verified_frozen_card_escalated_no_invent.md) |
-| EC_12 | Fraud $650 → Security & Fraud, priority high | Fraud / Security | 4/4 | ✅ PASS | [12_fraud_650_security_fraud_priority_high.md](../transcripts/12_fraud_650_security_fraud_priority_high.md) |
+| EC_12 | Fraud $650 claimed but DB shows only $115 → amount mismatch pauses escalation, prompts retry | Fraud / Security | 4/4 | ✅ PASS | [12_fraud_650_claimed_but_db_shows_only_115_.md](../transcripts/12_fraud_650_claimed_but_db_shows_only_115_.md) |
 
 ---
 
@@ -124,10 +124,10 @@
 
 ### EC_10: Three wrong attempts then lockout – ✅ PASS
 - **Category:** Security / Lockout
-- **Rationale:** Tests the 3-strike lockout: after 3 wrong verifications a ticket is created for Account Operations and no further actions are allowed.
+- **Rationale:** Tests the 3-strike lockout: after 3 wrong verifications the chat session is blocked for security and no further actions or human escalations are allowed.
 - **Assertions:**
-  - [x] `handed_off`: Session handed off (**PASS**)
-  - [x] `ticket_dept == 'Account Operations'`: Ticket dept Account Operations (**PASS**)
+  - [x] `locked or failed_attempts >= 3`: Chat session locked (**PASS**)
+  - [x] `not handed_off and ticket is None`: Not escalated to human (**PASS**)
   - [x] `not verified`: Not verified (**PASS**)
   - [x] `no_email_in_replies`: No email in replies (**PASS**)
 
@@ -140,11 +140,11 @@
   - [x] `no_invented_reason`: No invented freeze reason in replies (**PASS**)
   - [x] `no_timing_promise`: No timing promise (**PASS**)
 
-### EC_12: Fraud $650 → Security & Fraud, priority high – ✅ PASS
+### EC_12: Fraud $650 claimed but DB shows only $115 → amount mismatch pauses escalation, prompts retry – ✅ PASS
 - **Category:** Fraud / Security
-- **Rationale:** Tests that $650 loss triggers high-priority escalation to Security & Fraud without requiring verification.
+- **Rationale:** Tests that when claimed loss ($650) does not match verified transactions ($115), the agent does NOT escalate to human; it pauses, surfaces the discrepancy, and prompts the customer to verify details (Attempt 1 of 3).
 - **Assertions:**
-  - [x] `handed_off`: Handed off (**PASS**)
-  - [x] `ticket_dept == 'Security & Fraud'`: Escalated to Security & Fraud (**PASS**)
-  - [x] `ticket_priority == 'high'`: Priority high (loss > $500) (**PASS**)
+  - [x] `verified`: Customer verified before fraud check (**PASS**)
+  - [x] `not handed_off and ticket is None`: Not escalated to human on amount mismatch (**PASS**)
+  - [x] `amount_in_reply`: Reply mentions verified dollar amount and discrepancy (**PASS**)
   - [x] `no_email_in_replies`: No email in replies (**PASS**)

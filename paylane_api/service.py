@@ -79,6 +79,8 @@ class SessionState:
         ticket: Optional[Dict[str, Any]] = None,
         trace: Optional[List[Dict[str, Any]]] = None,
         card_status: Optional[str] = None,
+        pending_fraud: Optional[Dict[str, Any]] = None,
+        locked: bool = False,
     ):
         self.session_id = session_id
         self.db = db if db is not None else get_fresh_db()
@@ -89,6 +91,9 @@ class SessionState:
         self.ticket = ticket
         self.trace = trace if trace is not None else []
         self.card_status = card_status
+        # Fraud report waiting for identity verification: {"loss_usd": float | None}
+        self.pending_fraud = pending_fraud
+        self.locked = locked
 
     def get(self, key: str, default: Any = None) -> Any:
         return getattr(self, key, default)
@@ -111,6 +116,8 @@ class SessionState:
             "ticket": self.ticket,
             "trace": self.trace,
             "card_status": self.card_status,
+            "pending_fraud": self.pending_fraud,
+            "locked": self.locked,
         }
 
 
@@ -129,7 +136,8 @@ def verify_customer(
     - Never reveals email or full card; returns {ok, name, card_status}.
     """
     handed_off = session.get("handed_off", False) if hasattr(session, "get") else session["handed_off"]
-    if handed_off:
+    locked = session.get("locked", False) if hasattr(session, "get") else getattr(session, "locked", False)
+    if handed_off or locked:
         return {
             "ok": False,
             "reason": "Account is locked or already handed off to human support. No account actions permitted.",
@@ -151,21 +159,18 @@ def verify_customer(
             session.failed_attempts = current_failed
 
         if current_failed >= 3:
-            ticket = escalate_to_human(
-                session,
-                summary="Three consecutive failed verification attempts. Account locked.",
-                department="Account Operations",
-                reason="THREE_STRIKE_LOCKOUT",
-            )
+            if hasattr(session, "__setitem__"):
+                session["locked"] = True
+            else:
+                session.locked = True
             return {
                 "ok": False,
                 "reason": (
-                    f"Verification failed 3 times. Account actions have been locked and the case "
-                    f"is escalated to Account Operations under ticket {ticket['ticket_id']}."
+                    "Verification failed 3 times. This chat session has been locked for security. "
+                    "All further actions are blocked."
                 ),
                 "reason_code": "LOCKED",
                 "failed_attempts": current_failed,
-                "ticket_id": ticket["ticket_id"],
             }
 
         return {
@@ -210,11 +215,12 @@ def get_transaction(
     4. return transaction details
     """
     handed_off = session.get("handed_off", False) if hasattr(session, "get") else session["handed_off"]
-    if handed_off:
+    locked = session.get("locked", False) if hasattr(session, "get") else getattr(session, "locked", False)
+    if handed_off or locked:
         return {
             "ok": False,
-            "reason": "Session has been handed off to human support. Account actions are suspended.",
-            "reason_code": "HANDED_OFF",
+            "reason": "Session is locked or handed off to human support. Account actions are suspended.",
+            "reason_code": "HANDED_OFF" if handed_off else "LOCKED",
         }
 
     verified = session.get("verified", False) if hasattr(session, "get") else session["verified"]
@@ -267,11 +273,12 @@ def issue_refund(
     10. mark refunded in session DB, generate deterministic refund_id, return ok:true
     """
     handed_off = session.get("handed_off", False) if hasattr(session, "get") else session["handed_off"]
-    if handed_off:
+    locked = session.get("locked", False) if hasattr(session, "get") else getattr(session, "locked", False)
+    if handed_off or locked:
         return {
             "ok": False,
-            "reason": "Session has been handed off to human support. Consequential actions are suspended.",
-            "reason_code": "HANDED_OFF",
+            "reason": "Session is locked or handed off to human support. Consequential actions are suspended.",
+            "reason_code": "HANDED_OFF" if handed_off else "LOCKED",
         }
 
     verified = session.get("verified", False) if hasattr(session, "get") else session["verified"]

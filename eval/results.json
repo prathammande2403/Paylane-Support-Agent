@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-10-21T07:13:17.603866+00:00",
-  "model": "openai/gpt-oss-20b",
+  "timestamp": "2026-10-22T07:37:11.492520+00:00",
+  "model": "openai/gpt-oss-120b",
   "total_conversations": 12,
   "passed_conversations": 12,
   "conversation_pass_rate": 100.0,
@@ -16,7 +16,7 @@
       "state": {
         "verified": false,
         "handed_off": false,
-        "failed_attempts": 1,
+        "failed_attempts": 0,
         "ticket": null,
         "refund_count": 0
       },
@@ -145,11 +145,11 @@
           "customer_id": "cust_101",
           "department": "Billing & Refunds",
           "priority": "normal",
-          "summary": "Refund request for transaction TXN_1003, amount $75.01, exceeds auto-approval limit.",
+          "summary": "Refund request needs manual review: amount is above the $75 auto-approval limit.",
           "status": "open",
           "created_at": "2026-10-01T12:00:00+00:00",
-          "reported_loss_usd": 75.01,
-          "reason": null
+          "reported_loss_usd": null,
+          "reason": "REFUND_REVIEW"
         },
         "refund_count": 0
       },
@@ -191,11 +191,11 @@
           "customer_id": "cust_101",
           "department": "Billing & Refunds",
           "priority": "normal",
-          "summary": "Refund request for transaction TXN_1004 is too old (30 days). Escalated to Billing & Refunds.",
+          "summary": "Refund request needs manual review: transaction is outside the 30-day refund window.",
           "status": "open",
           "created_at": "2026-10-01T12:00:00+00:00",
           "reported_loss_usd": null,
-          "reason": null
+          "reason": "REFUND_REVIEW"
         },
         "refund_count": 0
       },
@@ -349,30 +349,20 @@
       "all_passed": true,
       "state": {
         "verified": false,
-        "handed_off": true,
+        "handed_off": false,
         "failed_attempts": 3,
-        "ticket": {
-          "ticket_id": "TCK-0003",
-          "customer_id": "GUEST",
-          "department": "Account Operations",
-          "priority": "high",
-          "summary": "Three consecutive failed verification attempts. Account locked.",
-          "status": "open",
-          "created_at": "2026-10-01T12:00:00+00:00",
-          "reported_loss_usd": null,
-          "reason": "THREE_STRIKE_LOCKOUT"
-        },
+        "ticket": null,
         "refund_count": 0
       },
       "checks": [
         {
-          "desc": "Session handed off",
-          "expr": "handed_off",
+          "desc": "Chat session locked",
+          "expr": "locked or failed_attempts >= 3",
           "passed": true
         },
         {
-          "desc": "Ticket dept Account Operations",
-          "expr": "ticket_dept == 'Account Operations'",
+          "desc": "Not escalated to human",
+          "expr": "not handed_off and ticket is None",
           "passed": true
         },
         {
@@ -398,11 +388,11 @@
         "handed_off": true,
         "failed_attempts": 0,
         "ticket": {
-          "ticket_id": "TCK-0004",
+          "ticket_id": "TCK-0003",
           "customer_id": "cust_102",
           "department": "Security & Fraud",
           "priority": "high",
-          "summary": "Verified customer inquiry regarding frozen card status.",
+          "summary": "Customer inquired about a frozen card.",
           "status": "open",
           "created_at": "2026-10-01T12:00:00+00:00",
           "reported_loss_usd": null,
@@ -436,40 +426,30 @@
     },
     {
       "id": "EC_12",
-      "title": "Fraud $650 \u2192 Security & Fraud, priority high",
+      "title": "Fraud $650 claimed but DB shows only $115 \u2192 amount mismatch pauses escalation, prompts retry",
       "category": "Fraud / Security",
       "all_passed": true,
       "state": {
-        "verified": false,
-        "handed_off": true,
-        "failed_attempts": 0,
-        "ticket": {
-          "ticket_id": "TCK-0005",
-          "customer_id": "GUEST",
-          "department": "Security & Fraud",
-          "priority": "high",
-          "summary": "Customer reported fraud/unauthorized charge. Loss: $650.00. Verified: False.",
-          "status": "open",
-          "created_at": "2026-10-01T12:00:00+00:00",
-          "reported_loss_usd": 650.0,
-          "reason": "FRAUD_REPORT"
-        },
+        "verified": true,
+        "handed_off": false,
+        "failed_attempts": 1,
+        "ticket": null,
         "refund_count": 0
       },
       "checks": [
         {
-          "desc": "Handed off",
-          "expr": "handed_off",
+          "desc": "Customer verified before fraud check",
+          "expr": "verified",
           "passed": true
         },
         {
-          "desc": "Escalated to Security & Fraud",
-          "expr": "ticket_dept == 'Security & Fraud'",
+          "desc": "Not escalated to human on amount mismatch",
+          "expr": "not handed_off and ticket is None",
           "passed": true
         },
         {
-          "desc": "Priority high (loss > $500)",
-          "expr": "ticket_priority == 'high'",
+          "desc": "Reply mentions verified dollar amount and discrepancy",
+          "expr": "amount_in_reply",
           "passed": true
         },
         {
@@ -478,7 +458,7 @@
           "passed": true
         }
       ],
-      "transcript_file": "12_fraud_650_security_fraud_priority_high.md"
+      "transcript_file": "12_fraud_650_claimed_but_db_shows_only_115_.md"
     }
   ]
 }

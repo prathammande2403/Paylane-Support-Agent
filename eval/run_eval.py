@@ -23,6 +23,11 @@ if hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
+# Ensure project root is in sys.path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from fastapi.testclient import TestClient
 
 from agent.config import GROQ_MODEL, GROQ_API_KEY
@@ -191,6 +196,7 @@ def run_single_conversation(client: TestClient, conv: Dict[str, Any]) -> Dict[st
     session = session_store.get(session_id)
     verified = session.verified if session else False
     handed_off = session.handed_off if session else False
+    locked = getattr(session, "locked", False) if session else False
     failed_attempts = session.failed_attempts if session else 0
     ticket = session.ticket if session else None
     ticket_dept = ticket.get("department") if ticket else None
@@ -215,6 +221,7 @@ def run_single_conversation(client: TestClient, conv: Dict[str, Any]) -> Dict[st
     eval_context = {
         "verified": verified,
         "handed_off": handed_off,
+        "locked": locked,
         "failed_attempts": failed_attempts,
         "ticket": ticket,
         "ticket_dept": ticket_dept,
@@ -335,7 +342,12 @@ def generate_transcript_md(
             for event in tool_events:
                 step = event.get("step")
                 if step == "deterministic_trigger":
-                    lines.append(f"- **Deterministic Trigger:** `{event.get('trigger')}` → Ticket: `{event.get('ticket', {}).get('ticket_id')}` ({event.get('ticket', {}).get('department')}, Priority: `{event.get('ticket', {}).get('priority')}`)")
+                    # ticket can be None (e.g. fraud report held until the customer verifies)
+                    ticket_info = event.get("ticket") or {}
+                    if ticket_info:
+                        lines.append(f"- **Deterministic Trigger:** `{event.get('trigger')}` → Ticket: `{ticket_info.get('ticket_id')}` ({ticket_info.get('department')}, Priority: `{ticket_info.get('priority')}`)")
+                    else:
+                        lines.append(f"- **Deterministic Trigger:** `{event.get('trigger')}` → no ticket yet (waiting for identity verification)")
                 elif step == "tool_http_call":
                     tool_name = event.get("tool")
                     req = event.get("request", {})

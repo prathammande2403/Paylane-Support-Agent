@@ -145,6 +145,15 @@ INITIAL_TRANSACTIONS = {
         "merchant": "Futuristic Goods",
         "status": "settled",
     },
+    # 10. $650 settled unauthorized/fraud transaction for cust_101 (EC_12)
+    "TXN_1012": {
+        "txn_id": "TXN_1012",
+        "customer_id": "cust_101",
+        "amount": 650.00,
+        "date": (FIXED_TEST_CLOCK - timedelta(days=1)).isoformat(),
+        "merchant": "Electronics Depot",
+        "status": "settled",
+    },
 }
 
 def get_fresh_db() -> dict:

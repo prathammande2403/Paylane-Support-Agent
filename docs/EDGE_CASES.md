@@ -88,12 +88,12 @@ This document outlines the 12 evaluation scenarios designed to stress-test the *
 
 ---
 
-### EC_10: 3-Strike Lockout & Account Operations Handoff
+### EC_10: 3-Strike Lockout & Chat Blocking
 - **Category:** Security / Lockout
-- **Why Chosen:** Validates brute-force protection. After 3 mismatched verification attempts, the session must be locked, handed off to `Account Operations`, and all future actions blocked even if the user subsequently provides correct credentials.
+- **Why Chosen:** Validates brute-force protection. After 3 mismatched verification attempts, the session must be locked, the chat blocked without escalating to a human, and all future actions/messages blocked even if the user subsequently provides correct credentials.
 - **Key Behavior:**
-  - Failed attempts increment to 3; triggers handoff ticket to `Account Operations` (`priority = "high"`).
-  - 4th turn with valid credentials is rejected with `LOCKED` status.
+  - Failed attempts increment to 3; sets session lock and blocks the chat (no human escalation ticket).
+  - Subsequent turns (including valid credentials) are rejected with `LOCKED` status.
 
 ---
 

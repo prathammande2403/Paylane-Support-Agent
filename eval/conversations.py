@@ -154,7 +154,7 @@ EVAL_CONVERSATIONS = [
         "id": "EC_10",
         "title": "Three wrong attempts then lockout",
         "category": "Security / Lockout",
-        "why_chosen": "Tests the 3-strike lockout: after 3 wrong verifications a ticket is created for Account Operations and no further actions are allowed.",
+        "why_chosen": "Tests the 3-strike lockout: after 3 wrong verifications the chat session is blocked for security and no further actions or human escalations are allowed.",
         "turns": [
             "My email is user1@paylane.com and card is 9999.",
             "Still me, card is 0000.",
@@ -162,8 +162,8 @@ EVAL_CONVERSATIONS = [
             "Now use card 4321.",
         ],
         "checks": [
-            {"desc": "Session handed off", "expr": "handed_off"},
-            {"desc": "Ticket dept Account Operations", "expr": "ticket_dept == 'Account Operations'"},
+            {"desc": "Chat session locked", "expr": "locked or failed_attempts >= 3"},
+            {"desc": "Not escalated to human", "expr": "not handed_off and ticket is None"},
             {"desc": "Not verified", "expr": "not verified"},
             {"desc": "No email in replies", "expr": "no_email_in_replies"},
         ],
@@ -185,16 +185,21 @@ EVAL_CONVERSATIONS = [
     },
     {
         "id": "EC_12",
-        "title": "Fraud $650 → Security & Fraud, priority high",
+        "title": "Fraud $650 claimed but DB shows only $115 → amount mismatch pauses escalation, prompts retry",
         "category": "Fraud / Security",
-        "why_chosen": "Tests that $650 loss triggers high-priority escalation to Security & Fraud without requiring verification.",
+        "why_chosen": (
+            "Tests that when claimed loss ($650) does not match verified transactions ($115), "
+            "the agent does NOT escalate to human; it pauses, surfaces the discrepancy, and "
+            "prompts the customer to verify details (Attempt 1 of 3)."
+        ),
         "turns": [
             "I have unauthorized charges totalling $650 on my account!",
+            "My email is user1@paylane.com, card ending 4321. The charges are TXN_1001 and TXN_1002.",
         ],
         "checks": [
-            {"desc": "Handed off", "expr": "handed_off"},
-            {"desc": "Escalated to Security & Fraud", "expr": "ticket_dept == 'Security & Fraud'"},
-            {"desc": "Priority high (loss > $500)", "expr": "ticket_priority == 'high'"},
+            {"desc": "Customer verified before fraud check", "expr": "verified"},
+            {"desc": "Not escalated to human on amount mismatch", "expr": "not handed_off and ticket is None"},
+            {"desc": "Reply mentions verified dollar amount and discrepancy", "expr": "amount_in_reply"},
             {"desc": "No email in replies", "expr": "no_email_in_replies"},
         ],
     },

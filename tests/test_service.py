@@ -101,14 +101,13 @@ def test_three_strike_lockout_then_correct_credentials_rejected(session):
         assert res["ok"] is False
         assert session.failed_attempts == expected_failures
 
-    # Third failure locks the session and hands off
+    # Third failure locks the session without escalating to human
     r3 = verify_customer(session, EMAIL, "0000")
     assert r3["ok"] is False
     assert r3["reason_code"] == "LOCKED"
-    assert session.handed_off is True
-    assert session.ticket is not None
-    assert session.ticket["department"] == "Account Operations"
-    assert session.ticket["priority"] == "high"
+    assert session.locked is True
+    assert session.handed_off is False
+    assert session.ticket is None
 
     # Correct credentials no longer work once locked
     r4 = verify_customer(session, EMAIL, LAST4)

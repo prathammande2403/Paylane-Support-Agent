@@ -166,6 +166,7 @@ def api_chat(req: ChatRequest, request: Request) -> ChatResponse:
             "failed_attempts": session.failed_attempts,
             "handed_off": session.handed_off,
             "customer_id": session.customer_id,
+            "locked": getattr(session, "locked", False),
         },
         ticket=session.ticket,
     )

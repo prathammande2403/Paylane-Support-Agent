@@ -109,7 +109,9 @@ def escalate_to_human(
     Account Operations, General Support.
     Priority is determined automatically by the system.
     Summary must contain facts only without emails or card numbers.
+    Guardrail: Ensures customer_id is provided and has valid transaction with the amount asked.
     """
+    
     session_id = _get_session_id(config)
     payload = {
         "session_id": session_id,
