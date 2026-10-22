@@ -3,8 +3,8 @@
 - **Category:** Happy Path
 - **Rationale:** Validates the full refund flow end-to-end: verify → get_transaction → issue_refund → refund ID returned.
 - **Overall Status:** ✅ PASSED
-- **Evaluated At:** 2026-10-21T08:39:23.775107+00:00
-- **Model:** openai/gpt-oss-20b
+- **Evaluated At:** 2026-10-22T07:33:51.667786+00:00
+- **Model:** openai/gpt-oss-120b
 
 ---
 

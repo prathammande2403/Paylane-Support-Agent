@@ -3,8 +3,8 @@
 - **Category:** Policy Edge Case
 - **Rationale:** Tests that pending charges get a clear explanation (no refund, no escalation) without inventing a void tool or an ETA.
 - **Overall Status:** ✅ PASSED
-- **Evaluated At:** 2026-10-21T07:10:39.795129+00:00
-- **Model:** openai/gpt-oss-20b
+- **Evaluated At:** 2026-10-22T07:35:36.845823+00:00
+- **Model:** openai/gpt-oss-120b
 
 ---
 
@@ -17,11 +17,11 @@
 - **Tool Call:** `get_customer`
   - Request: `{"session_id": "eval_ec_06", "email": "user1@paylane.com", "card_last4": "4321"}`
   - Response: `{"ok": true, "id": "cust_101", "name": "Alex Morgan", "card_status": "active", "status": "active", "card_last4": "4321"}`
-- **Tool Call:** `issue_refund`
-  - Request: `{"session_id": "eval_ec_06", "txn_id": "TXN_1005", "amount": null}`
-  - Response: `{"ok": false, "reason": "Cannot refund transaction with status 'pending'. Pending charges cannot be refunded until settled.", "reason_code": "PENDING"}`
+- **Tool Call:** `get_transaction`
+  - Request: `{"session_id": "eval_ec_06", "txn_id": "TXN_1005"}`
+  - Response: `{"ok": true, "txn_id": "TXN_1005", "customer_id": "cust_101", "amount": 20.0, "date": "2026-09-30T12:00:00+00:00", "merchant": "Grocery Mart", "status": "pending"}`
 
-**Paylane Assistant:** I’m sorry, but that transaction is still pending. Pending charges can’t be refunded until they settle. Please check back after it’s completed, and let me know if you’d like to request a refund then.
+**Paylane Assistant:** I see the transaction is still pending, so it can’t be refunded right now. Once it settles, let me know and I’ll take care of the refund for you.
 
 ---
 
